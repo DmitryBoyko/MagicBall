@@ -6,13 +6,31 @@ namespace CrystalBall.Ui;
 
 public partial class ProfileModal : CanvasLayer
 {
+    private const int MinBirthYear = 1930;
+
+    private static readonly string[] MonthsShort =
+        ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+
     public event Action<UserProfile>? Saved;
 
+    private enum DatePart
+    {
+        None,
+        Day,
+        Month,
+        Year,
+    }
+
     private LineEdit _name = null!;
-    private OptionButton _day = null!;
-    private OptionButton _month = null!;
-    private OptionButton _year = null!;
-    private CheckButton? _music;
+    private Button _dayBtn = null!;
+    private Button _monthBtn = null!;
+    private Button _yearBtn = null!;
+    private int _birthDay = 25;
+    private int _birthMonth = 11;
+    private int _birthYear = 1995;
+    private DatePart _picking;
+    private TilePickerModal _picker = null!;
+    private CyberpunkLabeledSwitch? _music;
     private OptionButton? _background;
     private Button _save = null!;
     private Button? _close;
@@ -49,7 +67,7 @@ public partial class ProfileModal : CanvasLayer
         Layer = 32;
         var dim = new ColorRect
         {
-            Color = UiTheme.Dim,
+            Color = UiTheme.ModalDim,
             MouseFilter = Control.MouseFilterEnum.Stop,
         };
         dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -64,16 +82,15 @@ public partial class ProfileModal : CanvasLayer
         _safePad.AddChild(center);
 
         _panel = new PanelContainer { CustomMinimumSize = new Vector2(620, 0) };
-        _panel.AddThemeStyleboxOverride("panel", UiTheme.Panel());
         center.AddChild(_panel);
 
         var box = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
         box.AddThemeConstantOverride("separation", 12);
         _panel.AddChild(box);
 
-        box.AddChild(UiTheme.MakeLabel("Профиль Оракула", 28, UiTheme.Gold));
+        box.AddChild(UiTheme.MakeLabel("Настройки", 28, UiTheme.Gold));
         box.AddChild(UiTheme.MakeLabel(
-            "Имя и дата рождения сохраняются только локально на этом устройстве (user_profile.json). Их можно изменить позже в настройках.",
+            "Имя и дата рождения сохраняются только локально на этом устройстве.",
             16, UiTheme.Cream));
 
         box.AddChild(UiTheme.MakeLabel("Имя", 16, UiTheme.Cyan, HorizontalAlignment.Left));
@@ -84,26 +101,20 @@ public partial class ProfileModal : CanvasLayer
         box.AddChild(UiTheme.MakeLabel("Дата рождения", 16, UiTheme.Cyan, HorizontalAlignment.Left));
         var dates = new HBoxContainer();
         dates.AddThemeConstantOverride("separation", 8);
-        _day = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _month = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _year = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        for (var d = 1; d <= 31; d++)
-            _day.AddItem(d.ToString("00"), d);
-        string[] months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-        for (var m = 1; m <= 12; m++)
-            _month.AddItem(months[m - 1], m);
-        var nowYear = DateTime.Now.Year;
-        for (var y = nowYear - 12; y >= 1935; y--)
-            _year.AddItem(y.ToString(), y);
-        dates.AddChild(_day);
-        dates.AddChild(_month);
-        dates.AddChild(_year);
+        _dayBtn = UiTheme.MakeDateField("25");
+        _monthBtn = UiTheme.MakeDateField("ноя");
+        _yearBtn = UiTheme.MakeDateField("1995");
+        _dayBtn.Pressed += OpenDayPicker;
+        _monthBtn.Pressed += OpenMonthPicker;
+        _yearBtn.Pressed += OpenYearPicker;
+        dates.AddChild(MakeDateColumn("день", _dayBtn));
+        dates.AddChild(MakeDateColumn("месяц", _monthBtn));
+        dates.AddChild(MakeDateColumn("год", _yearBtn));
         box.AddChild(dates);
 
         if (_editMode)
         {
-            _music = new CheckButton { Text = "Фоновая музыка" };
-            _music.AddThemeFontSizeOverride("font_size", 18);
+            _music = CyberpunkLabeledSwitch.Create("Фоновая музыка", UiTheme.Magenta);
             _music.Toggled += OnMusicToggled;
             box.AddChild(_music);
 
@@ -125,6 +136,12 @@ public partial class ProfileModal : CanvasLayer
         _close.Pressed += HideModal;
         box.AddChild(_close);
 
+        CyberFrameBorder.SetupModal(_panel);
+
+        _picker = new TilePickerModal();
+        _picker.Picked += OnDatePartPicked;
+        AddChild(_picker);
+
         ApplySafeArea();
     }
 
@@ -138,6 +155,7 @@ public partial class ProfileModal : CanvasLayer
         var vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(720, 1600);
         var inner = Mathf.Max(280f, vp.X - insets.Left - insets.Right - 8f);
         _panel.CustomMinimumSize = new Vector2(Mathf.Min(620f, inner), 0f);
+        _picker?.ApplySafeArea();
     }
 
     private void SyncFromStore()
@@ -146,13 +164,13 @@ public partial class ProfileModal : CanvasLayer
         var profile = ProfileStore.Current;
         _name.Text = profile?.UserName ?? string.Empty;
         var birth = DateTime.TryParse(profile?.BirthDate, out var parsed) ? parsed : new DateTime(1995, 11, 25);
-        _day.Select(_day.GetItemIndex(birth.Day));
-        _month.Select(_month.GetItemIndex(birth.Month));
-        var yearIndex = _year.GetItemIndex(birth.Year);
-        _year.Select(yearIndex >= 0 ? yearIndex : 0);
+        _birthDay = birth.Day;
+        _birthMonth = birth.Month;
+        _birthYear = birth.Year;
+        ClampBirthDate();
+        RefreshDateButtons();
 
-        if (_music != null)
-            _music.SetPressedNoSignal(AppSettingsStore.Current.MusicEnabled);
+        _music?.SetPressedNoSignal(AppSettingsStore.Current.MusicEnabled);
         if (_background != null)
         {
             _background.Selected = AppSettingsStore.Current.BackgroundPreset switch
@@ -178,20 +196,18 @@ public partial class ProfileModal : CanvasLayer
             return;
         }
 
-        var day = _day.GetSelectedId();
-        var month = _month.GetSelectedId();
-        var year = _year.GetSelectedId();
+        ClampBirthDate();
         DateTime birth;
         try
         {
-            birth = new DateTime(year, month, day);
+            birth = new DateTime(_birthYear, _birthMonth, _birthDay);
         }
         catch
         {
             return;
         }
 
-        if (birth > DateTime.Today || birth < new DateTime(1935, 1, 1))
+        if (birth > DateTime.Today || birth < new DateTime(MinBirthYear, 1, 1))
             return;
 
         var profile = new UserProfile
@@ -229,5 +245,88 @@ public partial class ProfileModal : CanvasLayer
     private void OnMusicToggled(bool enabled)
     {
         GetNodeOrNull<AudioService>("/root/AudioService")?.SetEnabled(enabled);
+    }
+
+    private void OpenDayPicker()
+    {
+        _picking = DatePart.Day;
+        var max = MaxDayFor(_birthYear, _birthMonth);
+        var items = new List<TilePickItem>(max);
+        for (var d = 1; d <= max; d++)
+            items.Add(new TilePickItem(d, d.ToString()));
+        _picker.Present("День", items, _birthDay, 4);
+    }
+
+    private void OpenMonthPicker()
+    {
+        _picking = DatePart.Month;
+        var maxMonth = _birthYear == DateTime.Today.Year ? DateTime.Today.Month : 12;
+        var items = new List<TilePickItem>(maxMonth);
+        for (var m = 1; m <= maxMonth; m++)
+            items.Add(new TilePickItem(m, MonthsShort[m - 1]));
+        _picker.Present("Месяц", items, _birthMonth, 3);
+    }
+
+    private void OpenYearPicker()
+    {
+        _picking = DatePart.Year;
+        var maxYear = DateTime.Today.Year;
+        var items = new List<TilePickItem>(maxYear - MinBirthYear + 1);
+        for (var y = maxYear; y >= MinBirthYear; y--)
+            items.Add(new TilePickItem(y, y.ToString()));
+        _picker.Present("Год", items, _birthYear, 4);
+    }
+
+    private void OnDatePartPicked(int id)
+    {
+        switch (_picking)
+        {
+            case DatePart.Day:
+                _birthDay = id;
+                break;
+            case DatePart.Month:
+                _birthMonth = id;
+                break;
+            case DatePart.Year:
+                _birthYear = id;
+                break;
+        }
+
+        _picking = DatePart.None;
+        ClampBirthDate();
+        RefreshDateButtons();
+    }
+
+    private void ClampBirthDate()
+    {
+        _birthYear = Mathf.Clamp(_birthYear, MinBirthYear, DateTime.Today.Year);
+        _birthMonth = Mathf.Clamp(_birthMonth, 1, 12);
+        if (_birthYear == DateTime.Today.Year)
+            _birthMonth = Mathf.Min(_birthMonth, DateTime.Today.Month);
+        _birthDay = Mathf.Clamp(_birthDay, 1, MaxDayFor(_birthYear, _birthMonth));
+    }
+
+    private static int MaxDayFor(int year, int month)
+    {
+        var max = DateTime.DaysInMonth(year, month);
+        if (year == DateTime.Today.Year && month == DateTime.Today.Month)
+            max = Mathf.Min(max, DateTime.Today.Day);
+        return max;
+    }
+
+    private void RefreshDateButtons()
+    {
+        _dayBtn.Text = _birthDay.ToString("00");
+        _monthBtn.Text = MonthsShort[_birthMonth - 1];
+        _yearBtn.Text = _birthYear.ToString();
+    }
+
+    private static Control MakeDateColumn(string caption, Button field)
+    {
+        var col = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        col.AddThemeConstantOverride("separation", 4);
+        col.AddChild(UiTheme.MakeLabel(caption, 14, UiTheme.Cyan));
+        col.AddChild(field);
+        return col;
     }
 }

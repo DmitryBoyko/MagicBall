@@ -14,7 +14,7 @@ public partial class InterpretationSheet : CanvasLayer
         Layer = 28;
         Visible = false;
 
-        var dim = new ColorRect { Color = UiTheme.Dim };
+        var dim = new ColorRect { Color = UiTheme.ModalDim };
         dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         dim.GuiInput += _ => Hide();
         AddChild(dim);
@@ -25,7 +25,6 @@ public partial class InterpretationSheet : CanvasLayer
         ApplySafeArea();
 
         var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", UiTheme.Panel());
         panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _margin.AddChild(panel);
 
@@ -58,6 +57,8 @@ public partial class InterpretationSheet : CanvasLayer
         close.CustomMinimumSize = new Vector2(0, 88);
         close.Pressed += Hide;
         box.AddChild(close);
+
+        CyberFrameBorder.SetupModal(panel);
     }
 
     public void ApplySafeArea()

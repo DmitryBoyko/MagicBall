@@ -10,10 +10,17 @@ namespace CrystalBall.Ui;
 
 public partial class MainScene : Control
 {
+    /// <summary>
+    /// SUR photo warp behind the ball. Not in in-app settings — toggle here or in DevToggles.
+    /// </summary>
+    [Export]
+    public bool WarpBackgroundBehindBall { get; set; } = DevToggles.BackgroundWarpBehindBall;
+
     private TextureRect _background = null!;
     private TextureRect _ball = null!;
     private BallSparks _sparks = null!;
     private VortexField _vortex = null!;
+    private BackgroundWarp _warp = null!;
     private MarginContainer _uiPad = null!;
     private Button _ask = null!;
     private Button _openReading = null!;
@@ -67,6 +74,9 @@ public partial class MainScene : Control
         _background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(_background);
 
+        _warp = new BackgroundWarp();
+        AddChild(_warp);
+
         _ball = new TextureRect
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
@@ -86,6 +96,8 @@ public partial class MainScene : Control
             GD.PushError("[MainScene] Не загрузился res://scripts/crystal_ball.gdshader");
         AddChild(_ball);
         AddChild(_sparks);
+        _warp.Bind(_background, _ball);
+        _warp.SetEnabled(WarpBackgroundBehindBall);
 
         _vortex = new VortexField();
         AddChild(_vortex);
@@ -121,7 +133,7 @@ public partial class MainScene : Control
         _gear.Pressed += () => _modal.Present(editMode: true);
         footer.AddChild(_gear);
         footer.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        _otherApps = UiTheme.MakeButton("Другие приложения", 16);
+        _otherApps = UiTheme.MakeQuietButton("Другие приложения");
         _otherApps.Pressed += OnOtherApps;
         footer.AddChild(_otherApps);
         bottom.AddChild(footer);
@@ -132,6 +144,8 @@ public partial class MainScene : Control
         pad.AddChild(bottom);
         AddChild(pad);
         _uiPad = pad;
+
+        CyberFrameBorder.AttachTo(this);
 
         _context = new ContextManager();
         AddChild(_context);
@@ -164,6 +178,7 @@ public partial class MainScene : Control
         _sparks.Size = new Vector2(ballSize + sparkPad * 2f, ballSize + sparkPad * 2f);
         _sparks.SetBallRadius(ballSize * 0.5f);
         _vortex.SyncSize(GetViewportRect().Size);
+        _warp?.SetEnabled(WarpBackgroundBehindBall);
     }
 
     private void ApplyBackground()

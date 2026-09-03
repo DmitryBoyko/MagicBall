@@ -17,7 +17,7 @@ public partial class AdOverlay : CanvasLayer
     {
         Layer = 40;
         Visible = false;
-        var dim = new ColorRect { Color = new Color(0.02f, 0.02f, 0.04f, 0.94f) };
+        var dim = new ColorRect { Color = UiTheme.ModalDim };
         dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(dim);
 
@@ -25,13 +25,16 @@ public partial class AdOverlay : CanvasLayer
         _pad.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(_pad);
 
+        var panel = new PanelContainer();
+        panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _pad.AddChild(panel);
+
         var box = new VBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
         };
-        box.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         box.AddThemeConstantOverride("separation", 16);
-        _pad.AddChild(box);
+        panel.AddChild(box);
         ApplySafeArea();
 
         box.AddChild(UiTheme.MakeLabel("Реклама", 34, UiTheme.Gold));
@@ -42,6 +45,8 @@ public partial class AdOverlay : CanvasLayer
         _skip.Visible = false;
         _skip.Pressed += Finish;
         box.AddChild(_skip);
+
+        CyberFrameBorder.SetupModal(panel);
     }
 
     public void ApplySafeArea()

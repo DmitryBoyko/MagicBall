@@ -5,24 +5,59 @@ namespace CrystalBall.App;
 public partial class AudioService : Node
 {
     public const string Folder = "res://assets/audio/";
+    private const double SilenceBeforeAdvance = 0.35;
 
     private AudioStreamPlayer? _music;
     private readonly List<string> _tracks = [];
-    private readonly List<string> _queue = [];
-    private string? _lastPath;
+    private readonly List<string> _session = [];
+    private int _index = -1;
+    private double _silence;
+    private bool _advancing;
 
     public override void _Ready()
     {
+        ProcessMode = ProcessModeEnum.Always;
         _music = new AudioStreamPlayer
         {
             Name = "PlaylistPlayer",
             Bus = "Master",
             VolumeDb = -10f,
+            ProcessMode = ProcessModeEnum.Always,
         };
         _music.Finished += OnTrackFinished;
         AddChild(_music);
         ScanTracks();
+        ShuffleSession();
+        GD.Print($"[AudioService] {_session.Count} tracks in session playlist");
         Apply(AppSettingsStore.Current.MusicEnabled);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_music == null || !AppSettingsStore.Current.MusicEnabled)
+        {
+            _silence = 0;
+            return;
+        }
+
+        if (_music.Playing)
+        {
+            _silence = 0;
+            return;
+        }
+
+        _silence += delta;
+        if (_silence >= SilenceBeforeAdvance)
+        {
+            _silence = 0;
+            PlayNext();
+        }
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusIn)
+            CallDeferred(MethodName.EnsurePlaying);
     }
 
     public void Apply(bool enabled)
@@ -33,13 +68,11 @@ public partial class AudioService : Node
         if (!enabled)
         {
             _music.Stop();
+            _silence = 0;
             return;
         }
 
-        if (_music.Playing)
-            return;
-
-        PlayNext();
+        EnsurePlaying();
     }
 
     public void SetEnabled(bool enabled)
@@ -50,54 +83,79 @@ public partial class AudioService : Node
         Apply(enabled);
     }
 
+    private void EnsurePlaying()
+    {
+        if (_music == null || !AppSettingsStore.Current.MusicEnabled)
+            return;
+
+        if (_music.Playing)
+        {
+            _music.StreamPaused = false;
+            return;
+        }
+
+        PlayNext();
+    }
+
     private void OnTrackFinished()
     {
         if (!AppSettingsStore.Current.MusicEnabled)
             return;
-        PlayNext();
+        CallDeferred(MethodName.PlayNext);
     }
 
-    private void PlayNext(int skips = 0)
+    private void PlayNext()
     {
-        if (_music == null || _tracks.Count == 0 || skips > _tracks.Count)
+        if (_advancing || _music == null || !AppSettingsStore.Current.MusicEnabled)
             return;
-
-        if (_queue.Count == 0)
-            RefillQueue();
-
-        var path = _queue[0];
-        _queue.RemoveAt(0);
-        if (!ResourceLoader.Exists(path))
+        if (_session.Count == 0)
         {
-            PlayNext(skips + 1);
-            return;
+            ScanTracks();
+            ShuffleSession();
         }
 
-        var stream = GD.Load<AudioStream>(path);
-        if (stream == null)
-        {
-            PlayNext(skips + 1);
+        if (_session.Count == 0)
             return;
-        }
 
-        DisableLoop(stream);
-        _lastPath = path;
-        _music.Stream = stream;
-        _music.Play();
+        _advancing = true;
+        try
+        {
+            var attempts = _session.Count;
+            while (attempts-- > 0)
+            {
+                _index = (_index + 1) % _session.Count;
+                var path = _session[_index];
+                if (!ResourceLoader.Exists(path) && !FileAccess.FileExists(path))
+                    continue;
+
+                var stream = GD.Load<AudioStream>(path);
+                if (stream == null)
+                    continue;
+
+                DisableLoop(stream);
+                _music.Stream = stream;
+                _music.Play();
+                _silence = 0;
+                return;
+            }
+        }
+        finally
+        {
+            _advancing = false;
+        }
     }
 
-    private void RefillQueue()
+    private void ShuffleSession()
     {
-        _queue.Clear();
-        _queue.AddRange(_tracks);
-        for (var i = _queue.Count - 1; i > 0; i--)
+        _session.Clear();
+        _session.AddRange(_tracks);
+        for (var i = _session.Count - 1; i > 0; i--)
         {
             var j = Random.Shared.Next(i + 1);
-            (_queue[i], _queue[j]) = (_queue[j], _queue[i]);
+            (_session[i], _session[j]) = (_session[j], _session[i]);
         }
 
-        if (_lastPath != null && _queue.Count > 1 && _queue[0] == _lastPath)
-            (_queue[0], _queue[1]) = (_queue[1], _queue[0]);
+        _index = -1;
     }
 
     private void ScanTracks()
@@ -121,18 +179,8 @@ public partial class AudioService : Node
         if (dir == null)
             return;
 
-        dir.ListDirBegin();
-        while (true)
-        {
-            var name = dir.GetNext();
-            if (string.IsNullOrEmpty(name))
-                break;
-            if (dir.CurrentIsDir())
-                continue;
+        foreach (var name in dir.GetFiles())
             AddTrack(name, seen);
-        }
-
-        dir.ListDirEnd();
     }
 
     private void AddTrack(string name, HashSet<string> seen)
@@ -140,13 +188,24 @@ public partial class AudioService : Node
         if (string.IsNullOrEmpty(name) || name.EndsWith('/'))
             return;
 
-        var file = name.GetFile();
+        var file = StripImportSuffix(name.GetFile());
         if (!IsAudio(file) || !seen.Add(file))
             return;
 
         var path = Folder + file;
         if (ResourceLoader.Exists(path) || FileAccess.FileExists(path))
             _tracks.Add(path);
+    }
+
+    private static string StripImportSuffix(string file)
+    {
+        const string import = ".import";
+        const string remap = ".remap";
+        if (file.EndsWith(import, StringComparison.OrdinalIgnoreCase))
+            return file[..^import.Length];
+        if (file.EndsWith(remap, StringComparison.OrdinalIgnoreCase))
+            return file[..^remap.Length];
+        return file;
     }
 
     private static bool IsAudio(string name)
