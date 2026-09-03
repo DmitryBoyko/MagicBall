@@ -1,0 +1,2 @@
+# mobilenetv2-7.onnx уже в этой папке (res://models/).
+# При старте копируется в user://models/ для native OnnxRuntime.

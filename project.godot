@@ -1,0 +1,50 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Волшебный шар: гадание"
+config/description="Хрустальный шар — персональное гадание на основе профиля, контекста смартфона и последнего кадра."
+config/version="1.0.0"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Mobile")
+boot_splash/bg_color=Color(0.06, 0.03, 0.12, 1)
+boot_splash/show_image=false
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameRoot="*res://scripts/App/GameRoot.cs"
+OnnxInferenceEngine="*res://scripts/Vision/OnnxInferenceEngine.cs"
+AudioService="*res://scripts/App/AudioService.cs"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1600
+window/size/window_width_override=360
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[dotnet]
+
+project/assembly_name="MagicBall"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_2d=1

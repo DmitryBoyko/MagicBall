@@ -1,0 +1,17 @@
+.godot/
+.mono/
+packages/
+android/
+*.uid
+config/secrets.json
+proxy/.env
+proxy/data/semantic_cache.json
+proxy/__pycache__/
+proxy/.pytest_cache/
+__pycache__/
+.pytest_cache/
+*.pyc
+user://
+.DS_Store
+Thumbs.db
+*.csproj.old

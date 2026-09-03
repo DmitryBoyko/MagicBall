@@ -1,0 +1,1 @@
+"""MagicalBall oracle proxy."""

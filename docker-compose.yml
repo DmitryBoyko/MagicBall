@@ -1,0 +1,22 @@
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: proxy/Dockerfile
+    image: magicalball-proxy:latest
+    container_name: magicalball-proxy
+    restart: unless-stopped
+    env_file:
+      - proxy/.env
+    environment:
+      PROXY_HOST: 0.0.0.0
+      API_PORT: "8000"
+      PYTHONPATH: /app
+    ports:
+      - "${API_PORT:-17879}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://c7talrrr7xpta"
+path="res://.godot/imported/Nebula Loop.mp3-d343373eeab48f0af6b790da2033d4b8.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/Nebula Loop.mp3"
+dest_files=["res://.godot/imported/Nebula Loop.mp3-d343373eeab48f0af6b790da2033d4b8.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
