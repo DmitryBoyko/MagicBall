@@ -29,6 +29,7 @@ public partial class MainScene : Control
     private ProfileModal _modal = null!;
     private AdOverlay _ads = null!;
     private InterpretationSheet _sheet = null!;
+    private CastingLogSheet _casting = null!;
     private ContextManager _context = null!;
     private readonly BackgroundController _backgrounds = new();
     private OracleResult? _lastResult;
@@ -98,6 +99,7 @@ public partial class MainScene : Control
         _ads?.ApplySafeArea();
         LayoutBall();
         LayoutReadingSheet();
+        LayoutCastingSheet();
     }
 
     private void BuildTree()
@@ -190,6 +192,8 @@ public partial class MainScene : Control
         _sheet.Closed += OnReadingClosed;
         _sheet.CaptureChrome += OnShareCaptureChrome;
         AddChild(_sheet);
+        _casting = new CastingLogSheet();
+        AddChild(_casting);
     }
 
     private void LayoutBall()
@@ -299,7 +303,7 @@ public partial class MainScene : Control
             return;
 
         _ask.Text = "Спросить";
-        var sheetOpen = _sheet is { Visible: true };
+        var sheetOpen = _sheet is { Visible: true } || _casting is { Visible: true };
         _ask.Visible = _introFinished && !sheetOpen;
         _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling || sheetOpen;
         CacheAskBottom();
@@ -314,10 +318,21 @@ public partial class MainScene : Control
 
     private void LayoutReadingSheet()
     {
-        if (_sheet is not { Visible: true })
+        if (_sheet is { Visible: true })
+        {
+            CacheAskBottom();
+            _sheet.LayoutReadingBand(ComputeReadingBand());
+        }
+
+        LayoutCastingSheet();
+    }
+
+    private void LayoutCastingSheet()
+    {
+        if (_casting is not { Visible: true })
             return;
         CacheAskBottom();
-        _sheet.LayoutReadingBand(ComputeReadingBand());
+        _casting.LayoutBand(ComputeReadingBand());
     }
 
     private Rect2 ComputeReadingBand()
@@ -430,6 +445,7 @@ public partial class MainScene : Control
         SetSunActive(false);
         SetBallLook(BallLook.Asking);
         _sparks.SetAsking(true);
+        BeginCastingRitual();
 
         var request = RunOracleAsync(profile);
         try
@@ -451,7 +467,23 @@ public partial class MainScene : Control
             };
         }
 
+        EndCastingRitual();
         ApplyOracleOutcome(_lastResult);
+    }
+
+    private void BeginCastingRitual()
+    {
+        CacheAskBottom();
+        _casting.Begin();
+        LayoutCastingSheet();
+        RefreshActionButton();
+        CallDeferred(MethodName.LayoutCastingSheet);
+    }
+
+    private void EndCastingRitual()
+    {
+        _casting.Dismiss();
+        RefreshActionButton();
     }
 
     private async void ApplyOracleOutcome(OracleResult? result)
@@ -575,6 +607,8 @@ public partial class MainScene : Control
     {
         if (_uiPad != null)
             _uiPad.Visible = !capturing;
+        if (_casting != null && capturing)
+            _casting.Visible = false;
         if (!capturing)
         {
             RefreshActionButton();
@@ -584,10 +618,38 @@ public partial class MainScene : Control
 
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)
     {
-        var photo = await PhotoSampler.AnalyzeRecentAsync();
-        var context = await _context.AssembleAsync(profile, photo);
+        var casting = new CastingProgress(_casting, GetTree());
+
+        await casting.ReportAsync(CastingStage.Name);
+        await casting.ReportAsync(CastingStage.Zodiac);
+        await casting.ReportAsync(CastingStage.Destiny);
+        await casting.ReportAsync(CastingStage.Time);
+
+        var geoTask = GeoLocationService.ResolveAsync();
+        var weatherTask = WeatherService.ResolveAsync();
+
+        await casting.ReportAsync(CastingStage.Geo);
+        var geo = await geoTask;
+
+        await casting.ReportAsync(CastingStage.Weather);
+        var weather = await weatherTask;
+
+        await casting.ReportAsync(CastingStage.Battery);
+        await casting.ReportAsync(CastingStage.Power);
+
+        var photo = await PhotoSampler.AnalyzeRecentAsync(casting);
+
+        var context = _context.Assemble(profile, photo);
+        context.DynamicSnapshot.GeoLocationType = string.IsNullOrWhiteSpace(geo) ? null : geo;
+        context.DynamicSnapshot.WeatherState = string.IsNullOrWhiteSpace(weather) ? null : weather;
+
+        await casting.ReportAsync(CastingStage.Entropy);
+        await casting.ReportAsync(CastingStage.BallMood);
+        await casting.ReportAsync(CastingStage.BallTint);
+        await casting.ReportAsync(CastingStage.WorldPressure);
+
         var gateway = GameRoot.Instance?.Gateway ?? new AiGateway(AppConfig.Current);
-        return await gateway.InterpretAsync(context);
+        return await gateway.InterpretAsync(context, casting);
     }
 
     private void OnOtherApps()

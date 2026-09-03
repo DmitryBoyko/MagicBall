@@ -22,8 +22,17 @@ public sealed class AiGateway : IDisposable
         _cache = new SemanticCache(config.SemanticMatchThreshold);
     }
 
-    public async Task<OracleResult> InterpretAsync(OracleContext context, CancellationToken cancellationToken = default)
+    public async Task<OracleResult> InterpretAsync(
+        OracleContext context,
+        CastingProgress? casting = null,
+        CancellationToken cancellationToken = default)
     {
+        if (casting != null)
+        {
+            await casting.ReportAsync(CastingStage.Weave, cancellationToken).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.Await, cancellationToken).ConfigureAwait(true);
+        }
+
         if (_config.UseProxy && _proxy.IsConfigured)
         {
             try

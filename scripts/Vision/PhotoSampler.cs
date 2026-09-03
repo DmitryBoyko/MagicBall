@@ -18,8 +18,11 @@ public readonly record struct PhotoFrame(
 /// </summary>
 public static class PhotoSampler
 {
-    public static async Task<PhotoAnalysis> AnalyzeRecentAsync()
+    public static async Task<PhotoAnalysis> AnalyzeRecentAsync(CastingProgress? casting = null)
     {
+        if (casting != null)
+            await casting.ReportAsync(CastingStage.PhotoScan).ConfigureAwait(true);
+
         var preprocessor = new ImagePreprocessor();
         var take = AppConfig.Current.PhotoLookbackCount;
         var paths = preprocessor.ListLatestGalleryPaths(take);
@@ -47,19 +50,33 @@ public static class PhotoSampler
             await YieldFrameAsync().ConfigureAwait(true);
         }
 
+        PhotoAnalysis analysis;
         if (frames.Count > 0)
-            return ImagePreprocessor.Merge(frames);
+        {
+            analysis = ImagePreprocessor.Merge(frames);
+        }
+        else
+        {
+            var fallback = preprocessor.LoadFallbackImage();
+            try
+            {
+                analysis = ImagePreprocessor.Merge(
+                    [await AnalyzeFrameAsync(preprocessor, worker, engine, fallback).ConfigureAwait(true)]);
+            }
+            finally
+            {
+                fallback.Dispose();
+            }
+        }
 
-        var fallback = preprocessor.LoadFallbackImage();
-        try
+        if (casting != null)
         {
-            return ImagePreprocessor.Merge(
-                [await AnalyzeFrameAsync(preprocessor, worker, engine, fallback).ConfigureAwait(true)]);
+            await casting.ReportAsync(CastingStage.PhotoMystic).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.PhotoPalette).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.PhotoLuminance).ConfigureAwait(true);
         }
-        finally
-        {
-            fallback.Dispose();
-        }
+
+        return analysis;
     }
 
     private static async Task<PhotoFrame> AnalyzeFrameAsync(
