@@ -42,7 +42,8 @@ public sealed class DynamicSnapshot
     public string? GeoLocationType { get; set; }
 
     [JsonPropertyName("weather_state")]
-    public string WeatherState { get; set; } = "Покров неба скрыт от прибора";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WeatherState { get; set; }
 
     [JsonPropertyName("device_battery_aura")]
     public string DeviceBatteryAura { get; set; } = string.Empty;

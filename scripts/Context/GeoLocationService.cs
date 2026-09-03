@@ -29,6 +29,8 @@ public static class GeoLocationService
 
     public static string Settlement => _settlement ?? "";
 
+    public static (double Lat, double Lon)? LastCoords { get; private set; }
+
     public static void Warmup()
     {
         RequestAndroidPermission();
@@ -100,6 +102,7 @@ public static class GeoLocationService
             cancellationToken.ThrowIfCancellationRequested();
             if (coords != null)
             {
+                LastCoords = coords;
                 var named = await ReverseGeocodeAsync(coords.Value.Lat, coords.Value.Lon, cancellationToken)
                     .ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(named))
@@ -129,6 +132,9 @@ public static class GeoLocationService
         _settlement = name.Trim();
         _resolvedUtc = HasSettlement ? DateTime.UtcNow : DateTime.MinValue;
     }
+
+    public static (double Lat, double Lon)? TryReadDeviceCoords() =>
+        ReadAndroidCoords() ?? LastCoords;
 
     private static (double Lat, double Lon)? ReadAndroidCoords()
     {

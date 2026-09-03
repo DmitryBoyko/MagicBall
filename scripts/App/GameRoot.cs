@@ -43,6 +43,7 @@ public partial class GameRoot : Node
         {
             ProbeSafeArea();
             GeoLocationService.Warmup();
+            WeatherService.Warmup();
         }
     }
 
@@ -59,6 +60,7 @@ public partial class GameRoot : Node
     private void WarmupLocation()
     {
         GeoLocationService.Warmup();
+        WeatherService.Warmup();
     }
 
     private async void WarmupDeferred()

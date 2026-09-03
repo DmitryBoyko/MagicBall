@@ -26,9 +26,12 @@ public partial class ContextManager : Node
     public async Task<OracleContext> AssembleAsync(UserProfile profile, PhotoAnalysis? photo = null)
     {
         var geoTask = GeoLocationService.ResolveAsync();
+        var weatherTask = WeatherService.ResolveAsync();
         var context = Assemble(profile, photo);
         var geo = await geoTask;
+        var weather = await weatherTask;
         context.DynamicSnapshot.GeoLocationType = string.IsNullOrWhiteSpace(geo) ? null : geo;
+        context.DynamicSnapshot.WeatherState = string.IsNullOrWhiteSpace(weather) ? null : weather;
         return context;
     }
 
@@ -94,6 +97,7 @@ public partial class ContextManager : Node
             TimeOfDay = TimeOfDayCatalog.Atmosphere(part),
             CurrentSeason = TimeOfDayCatalog.Season(now),
             GeoLocationType = GeoLocationService.HasSettlement ? GeoLocationService.Settlement : null,
+            WeatherState = WeatherService.HasPhrase ? WeatherService.Phrase : null,
             DeviceBatteryAura = MapBatteryAura(power.Known ? power.Percent : -1),
             DevicePowerState = MapPowerState(power),
             BallMoodCode = mood,
