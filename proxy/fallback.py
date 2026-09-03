@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 
@@ -65,8 +66,11 @@ class SemanticCache:
             self._entries = []
 
     def save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._entries, ensure_ascii=False), encoding="utf-8")
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(json.dumps(self._entries, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            logging.getLogger(__name__).warning("semantic cache not writable: %s", self._path)
 
     def find(self, question: str) -> OracleOut | None:
         if not question or not self._entries:

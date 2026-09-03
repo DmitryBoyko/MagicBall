@@ -73,11 +73,14 @@ public partial class CyberFrameBorder : ColorRect
         return frame;
     }
 
-    public static void SetupModal(PanelContainer panel)
+    public const string ModalBgAlphaMeta = "cyber_modal_bg_alpha";
+
+    public static void SetupModal(PanelContainer panel, float bgAlpha = 1f)
     {
         if (panel == null)
             return;
 
+        panel.SetMeta(ModalBgAlphaMeta, bgAlpha);
         var pad = EnsureContentMargin(panel);
         var frame = AttachTo(panel);
         ApplyContentInset(pad, frame);
@@ -172,7 +175,10 @@ public partial class CyberFrameBorder : ColorRect
     private static void SyncModalCorners(PanelContainer panel, CyberFrameBorder frame)
     {
         var radius = Mathf.RoundToInt(Mathf.Max(12f, frame.CornerRadiusPx));
-        panel.AddThemeStyleboxOverride("panel", UiTheme.ModalShell(radius));
+        var alpha = 1f;
+        if (panel.HasMeta(ModalBgAlphaMeta))
+            alpha = panel.GetMeta(ModalBgAlphaMeta).AsSingle();
+        panel.AddThemeStyleboxOverride("panel", UiTheme.ModalShell(radius, alpha));
     }
 
     private void OnResized()

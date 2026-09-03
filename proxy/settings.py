@@ -14,6 +14,7 @@ class Settings(BaseSettings):
         env_file=(ROOT_DIR / ".env", PROXY_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     host: str = Field(default="0.0.0.0", alias="PROXY_HOST")
@@ -22,7 +23,10 @@ class Settings(BaseSettings):
     ai_queue_max_depth: int = Field(default=2, alias="AI_QUEUE_MAX_DEPTH")
     ai_timeout_seconds: float = Field(default=20.0, alias="AI_TIMEOUT_SECONDS")
     semantic_threshold: float = Field(default=0.82, alias="SEMANTIC_THRESHOLD")
-    cache_path: Path = Field(default=PROXY_DIR / "data" / "semantic_cache.json")
+    cache_path: Path = Field(
+        default=PROXY_DIR / "data" / "semantic_cache.json",
+        alias="CACHE_PATH",
+    )
 
     gigachat_credentials: str = Field(default="", alias="GIGACHAT_CREDENTIALS")
     gigachat_scope: str = Field(default="GIGACHAT_API_PERS", alias="GIGACHAT_SCOPE")

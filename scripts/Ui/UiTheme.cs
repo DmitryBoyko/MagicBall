@@ -176,14 +176,14 @@ public static class UiTheme
     public static StyleBoxFlat Panel() => ModalShell(24);
 
     /// <summary>
-    /// Opaque modal fill. Neon edge comes from <see cref="CyberFrameBorder"/>.
+    /// Modal fill. Neon edge comes from <see cref="CyberFrameBorder"/>.
     /// </summary>
-    public static StyleBoxFlat ModalShell(int cornerRadius = 12)
+    public static StyleBoxFlat ModalShell(int cornerRadius = 12, float alpha = 1f)
     {
         var r = Mathf.Max(12, cornerRadius);
         return new StyleBoxFlat
         {
-            BgColor = new Color(0.04f, 0.03f, 0.11f, 1f),
+            BgColor = new Color(0.04f, 0.03f, 0.11f, Mathf.Clamp(alpha, 0.2f, 1f)),
             CornerRadiusTopLeft = r,
             CornerRadiusTopRight = r,
             CornerRadiusBottomLeft = r,

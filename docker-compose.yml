@@ -1,3 +1,13 @@
+# MagicalBall VPS — proxy only. Public: http://VPS_IP:API_PORT
+#
+# Inside the container the app always listens on 8000.
+# API_PORT is the HOST port (Godot). Default 17879 — TrueTaro uses 17878 on the same VPS.
+# restart: unless-stopped — container returns after `systemctl restart docker` / reboot
+# if it was running (not if you explicitly `compose stop`).
+#
+#   cp deploy/env.example .env   # set GIGACHAT_CREDENTIALS
+#   docker compose --env-file .env up -d --build
+
 services:
   proxy:
     build:
@@ -6,17 +16,33 @@ services:
     image: magicalball-proxy:latest
     container_name: magicalball-proxy
     restart: unless-stopped
-    env_file:
-      - proxy/.env
+    init: true
+    stop_grace_period: 20s
     environment:
       PROXY_HOST: 0.0.0.0
       API_PORT: "8000"
       PYTHONPATH: /app
+      CACHE_PATH: /app/proxy/data/semantic_cache.json
+      AI_QUEUE_TIMEOUT: ${AI_QUEUE_TIMEOUT:-5.0}
+      AI_QUEUE_MAX_DEPTH: ${AI_QUEUE_MAX_DEPTH:-2}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-20}
+      SEMANTIC_THRESHOLD: ${SEMANTIC_THRESHOLD:-0.82}
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2}
+      GIGACHAT_MODELS: ${GIGACHAT_MODELS:-GigaChat-2,GigaChat-2-Pro,GigaChat-2-Max,GigaChat-3-Ultra}
+      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-true}
+      GIGACHAT_CA_BUNDLE: ${GIGACHAT_CA_BUNDLE:-ce/russian_trusted_root_ca_pem.crt}
+    volumes:
+      - magicalball_cache:/app/proxy/data
     ports:
       - "${API_PORT:-17879}:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
-      start_period: 15s
-      retries: 3
+      start_period: 25s
+      retries: 5
+
+volumes:
+  magicalball_cache:

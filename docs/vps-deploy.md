@@ -243,7 +243,9 @@ bash deploy/backup-cache-on-vps.sh
 - Проброс `"${API_PORT:-17879}:8000"`.
 - `container_name: magicalball-proxy`, `image: magicalball-proxy:latest`.
 - Volume: `magicalball_cache:/app/proxy/data` и в settings кэш = `/app/proxy/data/semantic_cache.json`.
-- `restart: unless-stopped`.
+- `restart: unless-stopped` — контейнер сам встаёт после `systemctl restart docker` и после ребута VPS, если его не останавливали через `compose stop`.
+- Volume: `magicalball_cache:/app/proxy/data` и в settings кэш = `/app/proxy/data/semantic_cache.json`.
+- `init: true` (tini) + entrypoint чинит владельца тома, чтобы запись кэша не падала после recreate.
 - healthcheck: `curl -fsS http://127.0.0.1:8000/health`.
 
 Внутри контейнера `API_PORT=8000` / bind `0.0.0.0:8000` (как сейчас в Dockerfile). Хостовый `API_PORT` из `.env` только в секции `ports:`.

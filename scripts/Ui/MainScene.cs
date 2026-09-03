@@ -47,6 +47,12 @@ public partial class MainScene : Control
     private float _sparkPad;
     private ulong _introStartMsec;
     private const float IntroSeconds = 2.4f;
+    /// <summary>Как фото игрушек на меню epkids: лёгкий sway + bob вокруг точки покоя.</summary>
+    private const float IdleSwayRad = 0.035f;
+    private const float IdleBobPx = 4f;
+    private const float IdleBobRefHeight = 140f;
+    private float _idleTime;
+    private float _idlePhase;
 
     public override void _Ready()
     {
@@ -59,6 +65,14 @@ public partial class MainScene : Control
         if (ProfileStore.Current is not { IsComplete: true })
             _modal.Present(editMode: false);
         CallDeferred(MethodName.ApplySafeArea);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_introFinished)
+            return;
+        _idleTime += (float)delta;
+        ApplyIdlePose();
     }
 
     public override void _Notification(int what)
@@ -184,6 +198,7 @@ public partial class MainScene : Control
         var left = safe.Position.X + (safe.Size.X - ballSize) * 0.5f;
         var top = safe.Position.Y + safe.Size.Y * 0.02f;
         _ball.Size = new Vector2(ballSize, ballSize);
+        _ball.PivotOffset = _ball.Size * 0.5f;
         _sparkPad = ballSize * 0.18f;
         _sparks.Size = new Vector2(ballSize + _sparkPad * 2f, ballSize + _sparkPad * 2f);
         _sparks.SetBallRadius(ballSize * 0.5f);
@@ -209,7 +224,7 @@ public partial class MainScene : Control
             return;
         }
 
-        PlaceBallCluster(_ballTarget);
+        ApplyIdlePose();
     }
 
     private void StartBallIntro()
@@ -254,8 +269,19 @@ public partial class MainScene : Control
         if (_introFinished)
             return;
         _introFinished = true;
-        PlaceBallCluster(_ballTarget);
+        ApplyIdlePose();
         RefreshActionButton();
+    }
+
+    private void ApplyIdlePose()
+    {
+        var fade = Mathf.Clamp(_idleTime / 0.55f, 0f, 1f);
+        var bobAmp = Mathf.Max(IdleBobPx, _ball.Size.Y * (IdleBobPx / IdleBobRefHeight));
+        var sway = Mathf.Sin(_idleTime * 1.05f + _idlePhase) * IdleSwayRad * fade;
+        var bob = Mathf.Sin(_idleTime * 1.45f + _idlePhase * 1.7f) * bobAmp * fade;
+        _ball.PivotOffset = _ball.Size * 0.5f;
+        _ball.Rotation = sway;
+        PlaceBallCluster(_ballTarget + new Vector2(0f, bob));
     }
 
     private void RefreshActionButton()
@@ -306,6 +332,7 @@ public partial class MainScene : Control
     {
         var rng = new RandomNumberGenerator();
         rng.Randomize();
+        _idlePhase = rng.RandfRange(0f, Mathf.Tau);
         material.SetShaderParameter("session_seed", rng.RandfRange(0.4f, 97f));
         var spinSign = rng.Randf() < 0.5f ? -1f : 1f;
         var fogSpeed = rng.RandfRange(0.32f, 0.88f);
@@ -359,6 +386,7 @@ public partial class MainScene : Control
         _lastResult = null;
         SetSunActive(false);
         SetBallLit(true);
+        _sparks.SetAsking(true);
 
         var request = RunOracleAsync(profile);
         try
@@ -409,6 +437,7 @@ public partial class MainScene : Control
     {
         SetSunActive(false);
         SetBallLit(false);
+        _sparks.SetAsking(false);
         _step = OracleStep.Ask;
         RefreshActionButton();
         _sheet.PresentFog();
@@ -430,6 +459,7 @@ public partial class MainScene : Control
     {
         SetSunActive(false);
         SetBallLit(true);
+        _sparks.SetAsking(false);
         _step = OracleStep.Ask;
         RefreshActionButton();
     }
