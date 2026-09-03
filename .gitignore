@@ -19,3 +19,4 @@ user://
 .DS_Store
 Thumbs.db
 *.csproj.old
+*.keystore

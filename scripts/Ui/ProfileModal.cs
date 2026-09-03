@@ -36,9 +36,35 @@ public partial class ProfileModal : CanvasLayer
     private OptionButton? _background;
     private Button _save = null!;
     private Button? _close;
+    private Label? _permPhotos;
+    private Label? _permLocation;
+    private Button? _permGrant;
+    private Button? _permSettings;
     private MarginContainer? _safePad;
     private PanelContainer? _panel;
     private bool _editMode;
+
+    public override void _EnterTree()
+    {
+        base._EnterTree();
+        var tree = GetTree();
+        if (tree != null)
+            tree.OnRequestPermissionsResult += OnOsPermissionResult;
+    }
+
+    public override void _ExitTree()
+    {
+        var tree = GetTree();
+        if (tree != null)
+            tree.OnRequestPermissionsResult -= OnOsPermissionResult;
+        base._ExitTree();
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusIn && Visible)
+            RefreshPermissionUi();
+    }
 
     public void Present(bool editMode)
     {
@@ -141,6 +167,8 @@ public partial class ProfileModal : CanvasLayer
                 _background.AddItem("Ночь", 4);
                 box.AddChild(_background);
             }
+
+            AddPermissionBlock(box);
         }
 
         _save = UiTheme.MakeButton("Сохранить");
@@ -189,6 +217,7 @@ public partial class ProfileModal : CanvasLayer
 
         _music?.SetPressedNoSignal(AppSettingsStore.Current.MusicEnabled);
         _birds?.SetPressedNoSignal(AppSettingsStore.Current.BirdsEnabled);
+        RefreshPermissionUi();
         if (_background != null)
         {
             _background.Selected = AppSettingsStore.Current.BackgroundPreset switch
@@ -350,4 +379,59 @@ public partial class ProfileModal : CanvasLayer
         col.AddChild(field);
         return col;
     }
+
+    private void AddPermissionBlock(VBoxContainer box)
+    {
+        if (!AppPermissions.IsAndroid)
+            return;
+
+        box.AddChild(UiTheme.MakeLabel("Разрешения", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
+        box.AddChild(UiTheme.MakeLabel(
+            "Галерея нужна для снимков в гадании, местоположение — для погоды и города. Если системный диалог больше не появляется, откройте настройки приложения.",
+            UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left));
+
+        _permPhotos = UiTheme.MakeLabel("", UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left);
+        _permLocation = UiTheme.MakeLabel("", UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left);
+        box.AddChild(_permPhotos);
+        box.AddChild(_permLocation);
+
+        _permGrant = UiTheme.MakeButton("Выдать разрешения");
+        _permGrant.CustomMinimumSize = new Vector2(0, 56);
+        _permGrant.Pressed += OnGrantPermissions;
+        box.AddChild(_permGrant);
+
+        _permSettings = UiTheme.MakeQuietButton("Системные настройки приложения", UiTheme.FontModalCaption);
+        _permSettings.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _permSettings.Pressed += OnOpenSystemSettings;
+        box.AddChild(_permSettings);
+        RefreshPermissionUi();
+    }
+
+    private void RefreshPermissionUi()
+    {
+        if (_permPhotos == null || _permLocation == null)
+            return;
+
+        var status = AppPermissions.Check();
+        _permPhotos.Text = status.PhotosGranted ? "Галерея: выдано" : "Галерея: не выдано";
+        _permPhotos.AddThemeColorOverride("font_color", status.PhotosGranted ? UiTheme.Cyan : UiTheme.Gold);
+        _permLocation.Text = status.LocationGranted ? "Местоположение: выдано" : "Местоположение: не выдано";
+        _permLocation.AddThemeColorOverride("font_color", status.LocationGranted ? UiTheme.Cyan : UiTheme.Gold);
+
+        if (_permGrant != null)
+        {
+            _permGrant.Visible = status.HasMissing;
+            _permGrant.Disabled = !status.HasMissing;
+        }
+    }
+
+    private void OnGrantPermissions()
+    {
+        AppPermissions.RequestMissing();
+        RefreshPermissionUi();
+    }
+
+    private void OnOpenSystemSettings() => AppPermissions.OpenSystemSettings();
+
+    private void OnOsPermissionResult(string _permission, bool _granted) => RefreshPermissionUi();
 }

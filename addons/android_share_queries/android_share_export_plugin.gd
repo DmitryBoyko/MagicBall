@@ -17,6 +17,9 @@ func _get_android_manifest_element_contents(platform: EditorExportPlatform, _deb
 	return (
 		'<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n'
 		+ '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n'
+		+ '<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n'
+		+ '<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />\n'
+		+ '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n'
 		+ "<queries>\n"
 		+ '<intent><action android:name="android.intent.action.SEND" /><data android:mimeType="image/*" /></intent>\n'
 		+ "</queries>\n"

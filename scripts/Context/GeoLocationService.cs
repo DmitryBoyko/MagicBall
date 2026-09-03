@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using CrystalBall.App;
 using Godot;
 
 namespace CrystalBall.Context;
@@ -12,8 +13,6 @@ public static class GeoLocationService
 {
     public const double MaxSeconds = 3;
 
-    private const string FinePermission = "android.permission.ACCESS_FINE_LOCATION";
-    private const string CoarsePermission = "android.permission.ACCESS_COARSE_LOCATION";
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
@@ -33,18 +32,11 @@ public static class GeoLocationService
 
     public static void Warmup()
     {
-        RequestAndroidPermission();
         if (_warmup == null || (_warmup.IsCompleted && !IsFresh()))
             _warmup = ResolveAsync();
     }
 
-    public static void RequestAndroidPermission()
-    {
-        if (OS.GetName() != "Android")
-            return;
-        OS.RequestPermission(FinePermission);
-        OS.RequestPermission(CoarsePermission);
-    }
+    public static void RequestAndroidPermission() => AppPermissions.RequestMissing();
 
     public static async Task<string> ResolveAsync()
     {
