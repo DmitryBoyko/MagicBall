@@ -25,8 +25,10 @@ public partial class ContextManager : Node
 
     public async Task<OracleContext> AssembleAsync(UserProfile profile, PhotoAnalysis? photo = null)
     {
-        await Task.Yield();
-        return Assemble(profile, photo);
+        var geoTask = GeoLocationService.ResolveAsync();
+        var context = Assemble(profile, photo);
+        context.DynamicSnapshot.GeoLocationType = await geoTask;
+        return context;
     }
 
     public OracleContext Assemble(UserProfile profile, PhotoAnalysis? photo = null)
@@ -90,6 +92,7 @@ public partial class ContextManager : Node
             ExactTimeContext = $"{weekday}, {now:HH:mm}",
             TimeOfDay = TimeOfDayCatalog.Atmosphere(part),
             CurrentSeason = TimeOfDayCatalog.Season(now),
+            GeoLocationType = GeoLocationService.Settlement,
             DeviceBatteryAura = MapBatteryAura(power.Known ? power.Percent : -1),
             DevicePowerState = MapPowerState(power),
             BallMoodCode = mood,

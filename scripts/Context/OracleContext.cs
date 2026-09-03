@@ -38,7 +38,7 @@ public sealed class DynamicSnapshot
     public string CurrentSeason { get; set; } = string.Empty;
 
     [JsonPropertyName("geo_location_type")]
-    public string GeoLocationType { get; set; } = "Неопределённый городской контур";
+    public string GeoLocationType { get; set; } = GeoLocationService.Unavailable;
 
     [JsonPropertyName("weather_state")]
     public string WeatherState { get; set; } = "Покров неба скрыт от прибора";

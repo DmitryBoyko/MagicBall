@@ -15,7 +15,9 @@ func _get_android_manifest_element_contents(platform: EditorExportPlatform, _deb
 	if platform.get_name() != "Android":
 		return ""
 	return (
-		"<queries>\n"
+		'<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n'
+		+ '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n'
+		+ "<queries>\n"
 		+ '<intent><action android:name="android.intent.action.SEND" /><data android:mimeType="image/*" /></intent>\n'
 		+ "</queries>\n"
 	)

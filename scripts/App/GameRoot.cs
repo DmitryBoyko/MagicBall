@@ -1,4 +1,5 @@
 using CrystalBall.Ai;
+using CrystalBall.Context;
 using CrystalBall.Profile;
 using CrystalBall.Ui;
 using CrystalBall.Vision;
@@ -27,6 +28,7 @@ public partial class GameRoot : Node
         Gateway = new AiGateway(Config);
         CallDeferred(MethodName.WarmupDeferred);
         CallDeferred(MethodName.ProbeSafeArea);
+        CallDeferred(MethodName.WarmupLocation);
         if (OS.GetName() == "Android")
         {
             ScheduleInsetProbe(0.35);
@@ -38,7 +40,10 @@ public partial class GameRoot : Node
     public override void _Notification(int what)
     {
         if (what == NotificationApplicationFocusIn)
+        {
             ProbeSafeArea();
+            GeoLocationService.Warmup();
+        }
     }
 
     private void ScheduleInsetProbe(double delay)
@@ -49,6 +54,11 @@ public partial class GameRoot : Node
     private void ProbeSafeArea()
     {
         SafeAreaHelper.RelayoutTree(GetTree());
+    }
+
+    private void WarmupLocation()
+    {
+        GeoLocationService.Warmup();
     }
 
     private async void WarmupDeferred()
