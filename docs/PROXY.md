@@ -2,7 +2,13 @@
 
 Ключ GigaChat живёт только на сервере. Клиент шлёт JSON в `POST /api/v1/oracle`.
 
-Прод на VPS (первый деплой и апдейты): **[`docs/vps-deploy.md`](vps-deploy.md)**, шпаргалка [`deploy/DEPLOY.txt`](../deploy/DEPLOY.txt).
+Прод на VPS: **[`docs/vps-deploy.md`](vps-deploy.md)** (полный гайд), шпаргалка [`deploy/DEPLOY.txt`](../deploy/DEPLOY.txt).
+
+Первый деплой на VPS — одна команда после WinSCP:
+
+```bash
+cd /opt/magicalball && chmod +x deploy/*.sh && bash deploy/setup-vps.sh
+```
 
 ## Локально
 

@@ -1,49 +1,43 @@
 # Деплой MagicalBall на VPS
 
-Как в TrueTaro и в проекте `71`: **ручной** деплой (WinSCP + bash), без авто-ssh.
+Ручной деплой (WinSCP + bash), без авто-ssh — как TrueTaro и проект `71`.
 
-Специфика MagicalBall (отличия от TrueTaro):
-
-- Postgres **не** нужен. Смыслы вшиты в `proxy/meaning_bank.py`, кэш — JSON-файл.
-- Ollama на VPS **не** нужен.
-- На сервере обязателен ключ **GigaChat** (`GIGACHAT_CREDENTIALS`). Без него API живой, но ответы пойдут в синтез/туман.
-- Тот же VPS, что TrueTaro (`147.45.173.26`). TrueTaro занимает **17878**. MagicalBall снаружи — **18437** (нестандартный порт).
-
-**Публичный адрес — IP + порт из `.env` (`VPS_IP`, `API_PORT`).** Отдельный домен не нужен.
-
-Шпаргалка: [`deploy/DEPLOY.txt`](../deploy/DEPLOY.txt).
+**Публичный адрес:** `http://147.45.173.26:18437`  
+**Каталог на VPS:** `/opt/magicalball/`  
+**Шпаргалка:** [`deploy/DEPLOY.txt`](../deploy/DEPLOY.txt)
 
 ---
 
-## Порты (важно)
+## Что на сервере
 
-На VPS уже заняты `80`, `443`, `8000`, стек `71` — `18087` / `18088`, TrueTaro — **`17878`**.  
-MagicalBall **не** берёт `8000` и **не** берёт `17878`.
+| Компонент | Нужен? |
+|-----------|--------|
+| Docker + compose | да |
+| Postgres | нет |
+| Ollama | нет |
+| GigaChat ключ (`GIGACHAT_CREDENTIALS`) | да — без него `/health` живой, но гадания уйдут в «туман» |
+
+TrueTaro на том же VPS: `/opt/truetaro`, порт **17878**. MagicalBall — **18437** (нестандартный, не путать с TrueTaro и не брать 80/443/8000).
+
+---
+
+## Порты
 
 | Где | Порт | Кто задаёт |
 |-----|------|------------|
-| Внутри контейнера `proxy` | всегда **8000** | Dockerfile / gunicorn |
-| На хосте VPS (снаружи) | **`API_PORT`** (default **18437**) | `.env` в `/opt/magicalball` |
-| JSON-кэш | том Docker `magicalball_cache` | не публикуется |
+| Внутри контейнера | **8000** | Dockerfile / gunicorn |
+| Снаружи (Godot, firewall) | **18437** | `API_PORT` в `/opt/magicalball/.env` |
+| Кэш | том `magicalball_cache` | не публикуется |
 
-Godot бьёт в **хостовый** порт:
+В Godot **никогда** не писать `:8000` — только хостовый `API_PORT`.
 
-```text
-http://<VPS_IP>:<API_PORT>
-```
-
-Default: `http://147.45.173.26:18437`.
-
-Перед стартом на VPS:
+Проверка занятости перед стартом:
 
 ```bash
 ss -tlnp | grep -E ':18437|:17878|:8000|:18087|:18088' || true
-# если 18437 занят — в .env: API_PORT=<другой свободный>
-# firewall / security group: открыть TCP именно этого API_PORT
 ```
 
-После смены `API_PORT` — тот же номер в Godot `config/api.json` (поле `android_base_url`).  
-Редактор на ПК по-прежнему ходит на `http://127.0.0.1:18437` (локальный uvicorn / compose).
+Если `18437` занят — сменить `API_PORT` в `.env` **и** в `config/api.json` → `android_base_url`.
 
 ---
 
@@ -57,17 +51,8 @@ VPS: /opt/magicalball/
         │
         ├─ docker compose (только proxy)
         ├─ volume magicalball_cache  →  /app/proxy/data
-        └─ host :API_PORT  →  container :8000
+        └─ host :18437  →  container :8000
 ```
-
-Godot (Android) → `http://147.45.173.26:18437/api/v1/oracle`.
-
-Каталоги на одном хосте рядом, не смешивать:
-
-| Стек | Каталог | Хостовый порт |
-|------|---------|----------------|
-| TrueTaro | `/opt/truetaro` | `17878` |
-| MagicalBall | `/opt/magicalball` | `18437` |
 
 ---
 
@@ -75,11 +60,12 @@ Godot (Android) → `http://147.45.173.26:18437/api/v1/oracle`.
 
 | Где | Файл | Назначение |
 |-----|------|------------|
-| ПК | `deploy/prepare-winscp.ps1` | Собрать `deploy\winscp-upload\` (без `.env`, без тестов, без кэша) |
-| VPS | `deploy/install-on-vps.sh` | Первый `docker compose --env-file .env up -d --build` + wait `/health` |
-| VPS | `deploy/reload-proxy-on-vps.sh` | Обновить **только** контейнер `proxy`: `--no-deps --force-recreate` |
-| VPS | `deploy/backup-cache-on-vps.sh` | Скопировать `semantic_cache.json` из тома в `deploy/backups/` |
+| ПК | `deploy/prepare-winscp.ps1` | Собрать `deploy\winscp-upload\` |
+| VPS | **`deploy/setup-vps.sh`** | **Всё в одном:** `.env`, ключ, firewall, docker, health |
 | VPS | `deploy/check-env.sh` | Проверить `GIGACHAT_CREDENTIALS`, `VPS_IP`, `API_PORT` |
+| VPS | `deploy/install-on-vps.sh` | Только docker compose + wait `/health` |
+| VPS | `deploy/reload-proxy-on-vps.sh` | Обновить контейнер `proxy` (том кэша не трогать) |
+| VPS | `deploy/backup-cache-on-vps.sh` | Бэкап `semantic_cache.json` |
 
 ---
 
@@ -92,33 +78,113 @@ cd C:\epm-games\MagicalBall
 .\deploy\prepare-winscp.ps1
 ```
 
-### A2. WinSCP → `/opt/magicalball/`
+Результат: `deploy\winscp-upload\` — заливать **содержимое** этой папки.
 
-Залей **содержимое** `deploy\winscp-upload\` в `/opt/magicalball/`.
+### A2. WinSCP → VPS
 
-### A3. На VPS
+```text
+Локально:  deploy\winscp-upload\*
+На VPS:    /opt/magicalball/
+```
+
+Должен появиться `/opt/magicalball/docker-compose.yml` (не вложенная папка `winscp-upload`).
+
+**Не перезаписывать** рабочий `.env` на сервере при последующих заливках.
+
+### A3. На VPS — одна команда (рекомендуется)
 
 ```bash
 mkdir -p /opt/magicalball
 cd /opt/magicalball
-cp deploy/env.example .env
-nano .env
-# GIGACHAT_CREDENTIALS=...
-# VPS_IP=147.45.173.26
-# API_PORT=18437
 chmod +x deploy/*.sh
-bash deploy/check-env.sh
-bash deploy/install-on-vps.sh
+bash deploy/setup-vps.sh
 ```
 
-Проверка:
+`setup-vps.sh` делает сам:
+
+1. Создаёт `.env` из `deploy/env.example`, если его нет
+2. Проставляет `VPS_IP=147.45.173.26`, `API_PORT=18437`
+3. **Копирует `GIGACHAT_CREDENTIALS` из `/opt/truetaro/.env`**, если в magicalball ключ пустой
+4. Открывает `ufw allow 18437/tcp`, если ufw активен
+5. Запускает `install-on-vps.sh` (build + health)
+
+### A3-alt. Ручной блок (если `setup-vps.sh` ещё не залит)
+
+Вставить **целиком** на VPS:
 
 ```bash
+cd /opt/magicalball
+
+cp -n deploy/env.example .env 2>/dev/null || true
+grep -q '^VPS_IP=' .env || echo 'VPS_IP=147.45.173.26' >> .env
+grep -q '^API_PORT=' .env || echo 'API_PORT=18437' >> .env
+sed -i 's/^VPS_IP=.*/VPS_IP=147.45.173.26/' .env
+sed -i 's/^API_PORT=.*/API_PORT=18437/' .env
+
+if grep -q '^GIGACHAT_CREDENTIALS=.\+' /opt/truetaro/.env 2>/dev/null; then
+  CRED=$(grep '^GIGACHAT_CREDENTIALS=' /opt/truetaro/.env | cut -d= -f2- | tr -d '\r')
+  sed -i "s|^GIGACHAT_CREDENTIALS=.*|GIGACHAT_CREDENTIALS=${CRED}|" .env
+  echo "OK: ключ взят из /opt/truetaro/.env"
+else
+  echo "Нет ключа в /opt/truetaro/.env"
+  echo "Вставь вручную: nano /opt/magicalball/.env"
+  echo "Строка: GIGACHAT_CREDENTIALS=твой_ключ"
+  exit 1
+fi
+
+chmod +x deploy/*.sh
+command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q 'Status: active' && ufw allow 18437/tcp
+bash deploy/install-on-vps.sh
 curl -s http://127.0.0.1:18437/health
 curl -s http://147.45.173.26:18437/health
 ```
 
-### A4. Клиент Godot
+Если TrueTaro на другом пути — ключ вписать вручную:
+
+```bash
+nano /opt/magicalball/.env
+# GIGACHAT_CREDENTIALS=ваш_base64_ключ_без_кавычек
+```
+
+Ключ также есть на ПК: `proxy\.env` или личный кабинет GigaChat (Authorization key).
+
+### A4. Ожидаемый результат
+
+Docker:
+
+```text
+Container magicalball-proxy  Started
+0.0.0.0:18437->8000/tcp
+```
+
+Health (локально и снаружи):
+
+```json
+{"status":"ok","service":"magicalball"}
+```
+
+Проверка порта:
+
+```bash
+ss -tlnp | grep ':18437'
+docker compose ps
+docker compose logs proxy --tail 50
+```
+
+### A5. Firewall
+
+Открыть TCP **18437** в двух местах:
+
+1. **На VPS** (если ufw):
+
+```bash
+sudo ufw allow 18437/tcp
+sudo ufw status
+```
+
+2. **В панели хостера** (security group / firewall VPS) — иначе с телефона не достучаться, даже если `curl` с самого сервера ок.
+
+### A6. Клиент Godot
 
 [`config/api.json`](../config/api.json):
 
@@ -130,35 +196,105 @@ curl -s http://147.45.173.26:18437/health
 }
 ```
 
+| Среда | Поле | URL |
+|-------|------|-----|
+| Редактор / Windows | `proxy_base_url` | `http://127.0.0.1:18437` |
+| APK (Android) | `android_base_url` | `http://147.45.173.26:18437` |
+
+После смены `api.json` — **пересобрать APK**.
+
+### A7. Проверка с телефона
+
+1. Установить свежий APK
+2. Сделать одно гадание
+3. Должен прийти ответ от LLM (не «туман»)
+4. Если `/health` с ПК ок, а с телефона нет — смотреть firewall хостера
+
 ---
 
-## B. Апдейт API
+## B. Обновление API (код прокси)
 
 ```text
 ПК:     .\deploy\prepare-winscp.ps1
-WinSCP: proxy/  (не трогать .env)
-VPS:    bash deploy/reload-proxy-on-vps.sh
+WinSCP: залить proxy/ (+ docker-compose.yml, если менялся)
+        НЕ трогать /opt/magicalball/.env
+VPS:    cd /opt/magicalball && bash deploy/reload-proxy-on-vps.sh
+        curl -s http://127.0.0.1:18437/health
 ```
 
-**Не** делать `docker compose down -v`.
+Только UI Godot → новая APK, VPS не нужен.
+
+**Запрещено:** `docker compose down -v`, `docker volume prune` — убьёт кэш.
 
 ---
 
-## Переменные (`.env` на VPS)
+## C. Бэкап кэша
 
-| Переменная | Смысл |
-|------------|--------|
-| `VPS_IP` | Публичный IP VPS. Default `147.45.173.26` |
-| `API_PORT` | Порт **на хосте** VPS (Godot). Default `18437` |
-| `GIGACHAT_CREDENTIALS` | Authorization key Sber. Обязателен для LLM |
+```bash
+cd /opt/magicalball
+bash deploy/backup-cache-on-vps.sh
+# → deploy/backups/cache-YYYYMMDD-HHMM.json
+```
+
+Потеря кэша не ломает прод — ответы снова пойдут в GigaChat.
+
+---
+
+## Переменные `.env`
+
+Шаблон: [`deploy/env.example`](../deploy/env.example)
+
+| Переменная | Default | Смысл |
+|------------|---------|--------|
+| `VPS_IP` | `147.45.173.26` | Публичный IP |
+| `API_PORT` | `18437` | Порт на хосте (Godot + firewall) |
+| `GIGACHAT_CREDENTIALS` | — | **Обязателен.** Authorization key Sber |
+| `GIGACHAT_SCOPE` | `GIGACHAT_API_PERS` | |
+| `GIGACHAT_MODELS` | ротация GigaChat-2… | |
+| `SEMANTIC_THRESHOLD` | `0.82` | Порог семантического кэша |
+
+`.env` **не коммитить**.
+
+---
+
+## Частые проблемы
+
+| Симптом | Решение |
+|---------|---------|
+| `ERROR: GIGACHAT_CREDENTIALS is empty` | `cp deploy/env.example .env` создаёт пустой ключ. Вписать ключ или взять из `/opt/truetaro/.env` (блок A3-alt) |
+| `ss -tlnp \| grep 18437` пусто | `install-on-vps.sh` не дошёл до конца — смотреть `docker compose logs proxy` |
+| `/health` ok на VPS, с телефона нет | Firewall хостера: открыть TCP 18437 |
+| `bind: address already in use` | Порт занят — другой `API_PORT` в `.env` и в `android_base_url` |
+| `/health` ok, шар в тумане | Пустой или неверный `GIGACHAT_CREDENTIALS` |
+| Android ходит в TrueTaro | В `api.json` ещё `:17878` — сменить на `:18437` |
+| После апдейта пропал кэш | Случайно сделали `down -v` |
+
+---
+
+## Запрещено
+
+- `docker compose down -v` / `docker volume prune`
+- Публиковать контейнерный `:8000` в Godot
+- Сажать MagicalBall на порт TrueTaro `17878`
+- Ключ GigaChat в APK / git
+- Заливать Godot-проект / APK на VPS
 
 ---
 
 ## Чеклист первого раза
 
-1. Firewall: TCP **18437** открыт.
-2. `prepare-winscp.ps1` → WinSCP в `/opt/magicalball/`.
-3. `.env` + `GIGACHAT_CREDENTIALS`.
-4. `install-on-vps.sh`, curl `/health`.
-5. `android_base_url` = `http://147.45.173.26:18437`.
-6. Сборка APK.
+- [ ] `prepare-winscp.ps1` → WinSCP в `/opt/magicalball/`
+- [ ] `bash deploy/setup-vps.sh` (или блок A3-alt)
+- [ ] `curl` `/health` локально и с `147.45.173.26`
+- [ ] Firewall: ufw + панель хостера, TCP 18437
+- [ ] `android_base_url` = `http://147.45.173.26:18437`
+- [ ] Пересборка APK
+- [ ] Одно гадание с телефона — ответ LLM, не туман
+
+## Чеклист апдейта API
+
+- [ ] `prepare-winscp.ps1`
+- [ ] WinSCP: `proxy/` (`.env` не трогать)
+- [ ] `reload-proxy-on-vps.sh`
+- [ ] `curl /health`
+- [ ] Тест гадания с Android
