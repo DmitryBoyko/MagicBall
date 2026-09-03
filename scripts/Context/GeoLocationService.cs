@@ -112,9 +112,9 @@ public static class GeoLocationService
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(fromIpCity))
+            if (!string.IsNullOrWhiteSpace(fromIpCity) && coords != null)
             {
-                Store(fromIpCity);
+                Store(AppendTerrain(fromIpCity, "город", null, coords.Value.Lat, coords.Value.Lon));
                 return Settlement;
             }
 
@@ -182,9 +182,11 @@ public static class GeoLocationService
             return null;
         if (!json.Value.TryGetProperty("address", out var address) || address.ValueKind != JsonValueKind.Object)
             return null;
-        return FormatSettlement(
-            First(address, "city", "town", "village", "hamlet", "municipality", "city_district", "suburb", "county"),
-            First(address, "state", "region"));
+        var (place, kind) = ReadPlaceKind(address);
+        var settlement = FormatSettlement(place, First(address, "state"));
+        if (string.IsNullOrWhiteSpace(settlement))
+            return null;
+        return AppendTerrain(settlement, kind, First(address, "region"), lat, lon);
     }
 
     private static async Task<string?> FromPhotonAsync(double lat, double lon, CancellationToken cancellationToken)
@@ -192,8 +194,7 @@ public static class GeoLocationService
         var url =
             "https://photon.komoot.io/reverse" +
             $"?lat={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
-            $"&lon={lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
-            "&lang=ru";
+            $"&lon={lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var json = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         if (json == null)
             return null;
@@ -203,9 +204,13 @@ public static class GeoLocationService
         var first = features[0];
         if (!first.TryGetProperty("properties", out var props) || props.ValueKind != JsonValueKind.Object)
             return null;
-        return FormatSettlement(
-            First(props, "city", "town", "village", "municipality", "district", "county", "name"),
-            First(props, "state", "region"));
+        var (place, kind) = ReadPlaceKind(props);
+        if (place == null)
+            place = First(props, "name");
+        var settlement = FormatSettlement(place, First(props, "state", "region"));
+        if (string.IsNullOrWhiteSpace(settlement))
+            return null;
+        return AppendTerrain(settlement, kind, First(props, "region", "state"), lat, lon);
     }
 
     private static async Task<(double Lat, double Lon, string City)?> LookupIpAsync(CancellationToken cancellationToken)
@@ -239,6 +244,97 @@ public static class GeoLocationService
             return place;
         return $"{place}, {region}";
     }
+
+    private static (string? Place, string Kind) ReadPlaceKind(JsonElement address)
+    {
+        if (Has(address, "city"))
+            return (First(address, "city"), "город");
+        if (Has(address, "town"))
+            return (First(address, "town"), "небольшой город");
+        if (Has(address, "village"))
+            return (First(address, "village"), "село");
+        if (Has(address, "hamlet"))
+            return (First(address, "hamlet"), "деревня");
+        if (Has(address, "municipality"))
+            return (First(address, "municipality"), "посёлок");
+        return (First(address, "city_district", "suburb", "district", "county"), "городская местность");
+    }
+
+    private static string AppendTerrain(string settlement, string kind, string? region, double lat, double lon)
+    {
+        var type = ComposeTerrain(kind, region, lat, lon);
+        return string.IsNullOrWhiteSpace(type) ? settlement : $"{settlement} — {type}";
+    }
+
+    private static string ComposeTerrain(string kind, string? region, double lat, double lon)
+    {
+        var macro = MacroFromRegion(region) ?? MacroFromCoords(lat, lon);
+        var coastal = NearCoast(lat, lon);
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(macro))
+            parts.Add(macro);
+        if (coastal)
+            parts.Add("приморский");
+        if (!string.IsNullOrWhiteSpace(kind))
+            parts.Add(kind);
+        return string.Join(" ", parts);
+    }
+
+    private static string? MacroFromRegion(string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+            return null;
+        if (region.Contains("Сибирск", StringComparison.OrdinalIgnoreCase))
+            return "сибирский";
+        if (region.Contains("Дальневосточ", StringComparison.OrdinalIgnoreCase))
+            return "дальневосточный";
+        if (region.Contains("Северо-Кавказ", StringComparison.OrdinalIgnoreCase))
+            return "северокавказский";
+        if (region.Contains("Северо-Запад", StringComparison.OrdinalIgnoreCase))
+            return "северо-западный";
+        if (region.Contains("Уральск", StringComparison.OrdinalIgnoreCase))
+            return "уральский";
+        if (region.Contains("Приволж", StringComparison.OrdinalIgnoreCase))
+            return "поволжский";
+        if (region.Contains("Южн", StringComparison.OrdinalIgnoreCase))
+            return "южный";
+        if (region.Contains("Центральн", StringComparison.OrdinalIgnoreCase))
+            return "центральный";
+        return null;
+    }
+
+    private static string? MacroFromCoords(double lat, double lon)
+    {
+        if (lat >= 66)
+            return "заполярный";
+        if (lon >= 120)
+            return "дальневосточный";
+        if (lon >= 65 && lon < 120 && lat is >= 48 and <= 76)
+            return "сибирский";
+        if (lon is >= 58 and < 65 && lat is >= 50 and <= 70)
+            return "уральский";
+        if (lat <= 47.5 && lon is >= 36 and <= 50)
+            return "южный";
+        if (lat is >= 58.8 and <= 62 && lon is >= 27 and <= 33)
+            return "северо-западный";
+        if (lat is >= 52 and <= 58 && lon is >= 30 and <= 42)
+            return "центральный";
+        return null;
+    }
+
+    /// <summary>Грубая маска российских морей: без отдельного coastline API.</summary>
+    private static bool NearCoast(double lat, double lon) =>
+        (lat is >= 41.0 and <= 47.4 && lon is >= 27.4 and <= 41.8) ||
+        (lat is >= 36.5 and <= 47.2 && lon is >= 46.6 and <= 54.2) ||
+        (lat is >= 53.9 and <= 66.2 && lon is >= 10.0 and <= 30.6) ||
+        (lat is >= 63.7 and <= 67.6 && lon is >= 32.0 and <= 44.5) ||
+        (lat is >= 68.0 and <= 71.2 && lon is >= 30.0 and <= 42.0) ||
+        (lon >= 131 && lat is >= 42.0 and <= 71.0);
+
+    private static bool Has(JsonElement obj, string key) =>
+        obj.TryGetProperty(key, out var el) &&
+        el.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(el.GetString());
 
     private static string? First(JsonElement obj, params string[] keys)
     {
