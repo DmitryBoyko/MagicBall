@@ -10,8 +10,16 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);android/**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- Android: только managed ORT; native .so подключается через export plugin (onnxruntime.aar). -->
+  <PropertyGroup Condition="'$(GodotTargetPlatform)' == 'android'">
+    <SuppressOnnxRuntimePlatformCompatibilityError>true</SuppressOnnxRuntimePlatformCompatibilityError>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(GodotTargetPlatform)' != 'android'">
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.19.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.19.0" />
   </ItemGroup>
 </Project>
