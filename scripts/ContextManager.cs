@@ -27,7 +27,8 @@ public partial class ContextManager : Node
     {
         var geoTask = GeoLocationService.ResolveAsync();
         var context = Assemble(profile, photo);
-        context.DynamicSnapshot.GeoLocationType = await geoTask;
+        var geo = await geoTask;
+        context.DynamicSnapshot.GeoLocationType = string.IsNullOrWhiteSpace(geo) ? null : geo;
         return context;
     }
 
@@ -92,7 +93,7 @@ public partial class ContextManager : Node
             ExactTimeContext = $"{weekday}, {now:HH:mm}",
             TimeOfDay = TimeOfDayCatalog.Atmosphere(part),
             CurrentSeason = TimeOfDayCatalog.Season(now),
-            GeoLocationType = GeoLocationService.Settlement,
+            GeoLocationType = GeoLocationService.HasSettlement ? GeoLocationService.Settlement : null,
             DeviceBatteryAura = MapBatteryAura(power.Known ? power.Percent : -1),
             DevicePowerState = MapPowerState(power),
             BallMoodCode = mood,
@@ -157,11 +158,14 @@ public partial class ContextManager : Node
     {
         if (percent < 0)
             return "Аура батареи скрыта прибором (заряд неизвестен)";
-        if (percent <= 20)
-            return $"Критическое истощение внутренних ресурсов (Заряд: {percent}%)";
+        if (percent <= 40)
+            return $"Критический / Истощенный (Заряд: {percent}%). " +
+                   "Недосмотрел, утомлён, подавлен, озабочен, в спешке; дефицит внимания и ментального ресурса.";
         if (percent <= 80)
-            return $"Стабильный, ровный энергетический баланс (Заряд: {percent}%)";
-        return $"Чаша полна чистой энергии, избыток сил (Заряд: {percent}%)";
+            return $"Стабильный / Рабочий (Заряд: {percent}%). " +
+                   "Норма, баланс, повседневная рутина; контролирует ситуацию, ресурсы стабильны.";
+        return $"Профицитный / Контролируемый (Заряд: {percent}%). " +
+               "Организован, спокоен, уверен, предусмотрителен; готов к планированию.";
     }
 
     private static string MapPowerState(DevicePowerProbe.Reading reading)

@@ -6,31 +6,34 @@ namespace CrystalBall.Context;
 
 /// <summary>
 /// GPS (Android) → reverse geocode как в LBSDetector: Nominatim, затем Photon.
+/// Весь запрос ограничен 3 секундами; при таймауте параметр сбрасывается и не идёт в промпт.
 /// </summary>
 public static class GeoLocationService
 {
-    public const string Unavailable = "Местоположение недоступно";
+    public const double MaxSeconds = 3;
+
     private const string FinePermission = "android.permission.ACCESS_FINE_LOCATION";
     private const string CoarsePermission = "android.permission.ACCESS_COARSE_LOCATION";
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
+    private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(4);
 
     private static readonly System.Net.Http.HttpClient Http = CreateHttp();
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
-    private static string _settlement = Unavailable;
+    private static string _settlement = "";
     private static DateTime _resolvedUtc = DateTime.MinValue;
     private static Task? _warmup;
 
-    public static string Settlement =>
-        string.IsNullOrWhiteSpace(_settlement) ? Unavailable : _settlement;
+    public static bool HasSettlement => !string.IsNullOrWhiteSpace(_settlement);
+
+    public static string Settlement => _settlement ?? "";
 
     public static void Warmup()
     {
         RequestAndroidPermission();
         if (_warmup == null || (_warmup.IsCompleted && !IsFresh()))
-            _warmup = ResolveAsync(TimeSpan.FromSeconds(8));
+            _warmup = ResolveAsync();
     }
 
     public static void RequestAndroidPermission()
@@ -41,35 +44,41 @@ public static class GeoLocationService
         OS.RequestPermission(CoarsePermission);
     }
 
-    public static async Task<string> ResolveAsync(TimeSpan? timeout = null)
+    public static async Task<string> ResolveAsync()
     {
         if (IsFresh())
             return Settlement;
 
-        var limit = timeout ?? TimeSpan.FromSeconds(4.5);
+        using var cts = new CancellationTokenSource(Budget);
         try
         {
-            var waiter = ResolveCoreAsync();
-            var done = await Task.WhenAny(waiter, Task.Delay(limit)).ConfigureAwait(false);
-            if (done != waiter)
-                return Settlement;
-            return await waiter.ConfigureAwait(false);
+            return await ResolveCoreAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            Reset();
+            return "";
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[GeoLocation] {ex.Message}");
-            return Settlement;
+            Reset();
+            return "";
         }
     }
 
     private static bool IsFresh() =>
-        _resolvedUtc != DateTime.MinValue
-        && DateTime.UtcNow - _resolvedUtc < CacheTtl
-        && _settlement != Unavailable;
+        HasSettlement && _resolvedUtc != DateTime.MinValue && DateTime.UtcNow - _resolvedUtc < CacheTtl;
 
-    private static async Task<string> ResolveCoreAsync()
+    private static void Reset()
     {
-        await Gate.WaitAsync().ConfigureAwait(false);
+        _settlement = "";
+        _resolvedUtc = DateTime.MinValue;
+    }
+
+    private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken)
+    {
+        await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (IsFresh())
@@ -80,7 +89,7 @@ public static class GeoLocationService
             string? fromIpCity = null;
             if (coords == null)
             {
-                var ip = await LookupIpAsync().ConfigureAwait(false);
+                var ip = await LookupIpAsync(cancellationToken).ConfigureAwait(false);
                 if (ip != null)
                 {
                     coords = (ip.Value.Lat, ip.Value.Lon);
@@ -88,9 +97,11 @@ public static class GeoLocationService
                 }
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             if (coords != null)
             {
-                var named = await ReverseGeocodeAsync(coords.Value.Lat, coords.Value.Lon).ConfigureAwait(false);
+                var named = await ReverseGeocodeAsync(coords.Value.Lat, coords.Value.Lon, cancellationToken)
+                    .ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(named))
                 {
                     Store(named);
@@ -104,9 +115,8 @@ public static class GeoLocationService
                 return Settlement;
             }
 
-            if (_settlement == Unavailable)
-                Store(Unavailable, touchCache: false);
-            return Settlement;
+            Reset();
+            return "";
         }
         finally
         {
@@ -114,11 +124,10 @@ public static class GeoLocationService
         }
     }
 
-    private static void Store(string name, bool touchCache = true)
+    private static void Store(string name)
     {
         _settlement = name.Trim();
-        if (touchCache && _settlement != Unavailable)
-            _resolvedUtc = DateTime.UtcNow;
+        _resolvedUtc = HasSettlement ? DateTime.UtcNow : DateTime.MinValue;
     }
 
     private static (double Lat, double Lon)? ReadAndroidCoords()
@@ -146,22 +155,23 @@ public static class GeoLocationService
         return (lat, lon);
     }
 
-    private static async Task<string?> ReverseGeocodeAsync(double lat, double lon)
+    private static async Task<string?> ReverseGeocodeAsync(double lat, double lon, CancellationToken cancellationToken)
     {
-        var named = await FromNominatimAsync(lat, lon).ConfigureAwait(false);
+        var named = await FromNominatimAsync(lat, lon, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(named))
             return named;
-        return await FromPhotonAsync(lat, lon).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await FromPhotonAsync(lat, lon, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string?> FromNominatimAsync(double lat, double lon)
+    private static async Task<string?> FromNominatimAsync(double lat, double lon, CancellationToken cancellationToken)
     {
         var url =
             "https://nominatim.openstreetmap.org/reverse" +
             $"?lat={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
             $"&lon={lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
             "&format=json&addressdetails=1&accept-language=ru&zoom=14";
-        var json = await GetJsonAsync(url).ConfigureAwait(false);
+        var json = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         if (json == null)
             return null;
         if (!json.Value.TryGetProperty("address", out var address) || address.ValueKind != JsonValueKind.Object)
@@ -171,14 +181,14 @@ public static class GeoLocationService
             First(address, "state", "region"));
     }
 
-    private static async Task<string?> FromPhotonAsync(double lat, double lon)
+    private static async Task<string?> FromPhotonAsync(double lat, double lon, CancellationToken cancellationToken)
     {
         var url =
             "https://photon.komoot.io/reverse" +
             $"?lat={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
             $"&lon={lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}" +
             "&lang=ru";
-        var json = await GetJsonAsync(url).ConfigureAwait(false);
+        var json = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         if (json == null)
             return null;
         if (!json.Value.TryGetProperty("features", out var features) || features.ValueKind != JsonValueKind.Array
@@ -192,9 +202,11 @@ public static class GeoLocationService
             First(props, "state", "region"));
     }
 
-    private static async Task<(double Lat, double Lon, string City)?> LookupIpAsync()
+    private static async Task<(double Lat, double Lon, string City)?> LookupIpAsync(CancellationToken cancellationToken)
     {
-        var json = await GetJsonAsync("http://ip-api.com/json/?lang=ru&fields=status,city,regionName,lat,lon").ConfigureAwait(false);
+        var json = await GetJsonAsync(
+            "http://ip-api.com/json/?lang=ru&fields=status,city,regionName,lat,lon",
+            cancellationToken).ConfigureAwait(false);
         if (json == null)
             return null;
         if (!json.Value.TryGetProperty("status", out var status) || status.GetString() != "success")
@@ -236,21 +248,25 @@ public static class GeoLocationService
         return null;
     }
 
-    private static async Task<JsonElement?> GetJsonAsync(string url)
+    private static async Task<JsonElement?> GetJsonAsync(string url, CancellationToken cancellationToken)
     {
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.TryAddWithoutValidation("Accept", "application/json");
             req.Headers.TryAddWithoutValidation("Accept-Language", "ru");
-            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
+            using var resp = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
                 return null;
-            var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(body))
                 return null;
             using var doc = JsonDocument.Parse(body);
             return doc.RootElement.Clone();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -264,7 +280,7 @@ public static class GeoLocationService
         var handler = new HttpClientHandler();
         if (OperatingSystem.IsAndroid())
             handler.ServerCertificateCustomValidationCallback = static (_, _, _, _) => true;
-        var http = new System.Net.Http.HttpClient(handler) { Timeout = HttpTimeout };
+        var http = new System.Net.Http.HttpClient(handler) { Timeout = Budget };
         http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return http;
