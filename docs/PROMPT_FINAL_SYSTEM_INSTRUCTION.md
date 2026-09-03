@@ -45,6 +45,9 @@
       "photo_luminance_vibe": "Глубокий сумрак",
       "entropy_word_anchor": "Забытый Ключ",
       "ball_mood_modifier": "Строгое предостережение и холодный реализм",
+      "ball_tint_name": "Спокойствие",
+      "ball_tint_meaning": "снижает напряжение, ощущение безопасной тишины",
+      "ball_tint_modifier": "Спокойствие — снижает напряжение, ощущение безопасной тишины",
       "world_pressure_modifier": "Шум и суета (социум давит)"
     }
   }
