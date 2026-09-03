@@ -179,10 +179,9 @@ public partial class InterpretationSheet : CanvasLayer
             return;
         }
 
-        _shareHint.Text = path;
         if (OS.GetName() is "Windows" or "Linux" or "macOS")
             OS.ShellOpen(path.GetBaseDir());
-        FinishShare(path, "");
+        FinishShare("", "");
     }
 
     public void _on_gallery_android_result(bool ok, string errorText)
@@ -197,10 +196,7 @@ public partial class InterpretationSheet : CanvasLayer
     {
         _sharing = false;
         SetShareBusy(false);
-        if (!string.IsNullOrEmpty(error))
-            _shareHint.Text = error;
-        else if (string.IsNullOrEmpty(path) || path == "ok")
-            _shareHint.Text = "";
+        _shareHint.Text = error ?? "";
     }
 
     private void SetShareBusy(bool busy)

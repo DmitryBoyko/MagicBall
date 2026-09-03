@@ -33,6 +33,9 @@ public partial class MainScene : Control
     private readonly BackgroundController _backgrounds = new();
     private OracleResult? _lastResult;
     private OracleStep _step = OracleStep.Ask;
+    private bool _askSettling;
+    private Tween? _askSettleTween;
+    private const float SunFadeSeconds = 1.15f;
 
     private enum OracleStep
     {
@@ -296,7 +299,7 @@ public partial class MainScene : Control
 
         _ask.Text = _step == OracleStep.Answer ? "Ответ" : "Спросить";
         _ask.Visible = _introFinished && _step != OracleStep.Busy;
-        _ask.Disabled = !_introFinished || _step == OracleStep.Busy;
+        _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling;
     }
 
     private void PlaceBallCluster(Vector2 ballPos)
@@ -372,7 +375,7 @@ public partial class MainScene : Control
 
     private async void OnActionPressed()
     {
-        if (!_introFinished || _step == OracleStep.Busy)
+        if (!_introFinished || _step == OracleStep.Busy || _askSettling)
             return;
 
         if (_step == OracleStep.Answer)
@@ -500,10 +503,31 @@ public partial class MainScene : Control
 
     private void OnReadingClosed()
     {
-        SetSunActive(false);
         SetBallLook(BallLook.Idle);
         _sparks.SetAsking(false);
         _step = OracleStep.Ask;
+        _askSettling = true;
+        _askSettleTween?.Kill();
+        RefreshActionButton();
+        if (_ask != null)
+            _ask.Modulate = new Color(1f, 1f, 1f, 0.32f);
+
+        _askSettleTween = CreateTween();
+        _askSettleTween.SetEase(Tween.EaseType.Out);
+        _askSettleTween.SetTrans(Tween.TransitionType.Sine);
+        if (_ask != null)
+            _askSettleTween.TweenProperty(_ask, "modulate", Colors.White, SunFadeSeconds);
+
+        _sun?.FadeOut(SunFadeSeconds, OnSunFadeFinished);
+    }
+
+    private void OnSunFadeFinished()
+    {
+        if (!_askSettling)
+            return;
+        _askSettling = false;
+        if (_ask != null)
+            _ask.Modulate = Colors.White;
         RefreshActionButton();
     }
 

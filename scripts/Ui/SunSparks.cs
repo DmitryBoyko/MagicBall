@@ -40,6 +40,9 @@ public partial class SunSparks : Control
         public bool Ray;
     }
 
+    private Tween? _fade;
+    private bool _windingDown;
+
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
@@ -55,15 +58,18 @@ public partial class SunSparks : Control
 
     public void SetActive(bool on)
     {
-        Visible = on;
-        SetProcess(on);
+        _fade?.Kill();
+        _fade = null;
+        _windingDown = false;
         if (!on)
         {
-            _particles.Clear();
-            QueueRedraw();
+            HideNow();
             return;
         }
 
+        Modulate = Colors.White;
+        Visible = true;
+        SetProcess(true);
         if (_particles.Count == 0)
         {
             for (var i = 0; i < 16; i++)
@@ -76,6 +82,40 @@ public partial class SunSparks : Control
         QueueRedraw();
     }
 
+    public void FadeOut(float seconds, Action? finished = null)
+    {
+        _fade?.Kill();
+        if (!Visible)
+        {
+            HideNow();
+            finished?.Invoke();
+            return;
+        }
+
+        _windingDown = true;
+        var dur = Mathf.Max(0.2f, seconds);
+        _fade = CreateTween();
+        _fade.SetEase(Tween.EaseType.In);
+        _fade.SetTrans(Tween.TransitionType.Cubic);
+        _fade.TweenProperty(this, "modulate", new Color(1f, 1f, 1f, 0f), dur);
+        _fade.Finished += () =>
+        {
+            HideNow();
+            finished?.Invoke();
+        };
+    }
+
+    private void HideNow()
+    {
+        _windingDown = false;
+        _fade = null;
+        Visible = false;
+        SetProcess(false);
+        _particles.Clear();
+        Modulate = Colors.White;
+        QueueRedraw();
+    }
+
     public override void _Process(double delta)
     {
         if (!Visible || Size.X < 8f)
@@ -83,11 +123,14 @@ public partial class SunSparks : Control
 
         var dt = (float)delta;
         _pulse += dt;
-        _emitCd -= dt;
-        while (_emitCd <= 0f && _particles.Count < MaxParticles)
+        if (!_windingDown)
         {
-            _emitCd += EmitInterval * _rng.RandfRange(0.7f, 1.35f);
-            Spawn(_rng.Randf() < RayChance);
+            _emitCd -= dt;
+            while (_emitCd <= 0f && _particles.Count < MaxParticles)
+            {
+                _emitCd += EmitInterval * _rng.RandfRange(0.7f, 1.35f);
+                Spawn(_rng.Randf() < RayChance);
+            }
         }
 
         UpdateParticles(dt);
