@@ -7,7 +7,7 @@
 ```
 Ui (MainScene)
  ├─ ProfileModal / InterpretationSheet / AdOverlay / VortexField
- ├─ ContextManager          ← имя, зодиак, батарея, якоря, фото-тег
+ ├─ ContextManager          ← имя, зодиак, батарея, пульс вопрошания, якоря, фото-тег
  ├─ Vision                  ← ImagePreprocessor → PhotoSampler → OnnxInferenceEngine → InferenceWorker
  └─ AiGateway               ← FIFO 5с → GigaChatClient → extract_summary
                                  ↓ сбой / очередь полна
@@ -18,6 +18,8 @@ Ui (MainScene)
 |---|---|
 | `GameRoot` | Autoload: прогрев ONNX, профиль, настройки, музыка |
 | `ProfileStore` | `user://user_profile.json` |
+| `InquiryPulseStore` | `user://oracle_pulse.json` — тапы за последние N суток (по умолчанию 3), ротация устаревших дней |
+| `InquiryPulseMeter` | Плотность + вспышки + свежесть → `inquiry_pulse_aura` |
 | `AstroCalculator` | Знак, стихия, планета, число судьбы, тотем, возраст |
 | `ContextManager` | Склейка детерминированных + динамических + хаос-модификаторов |
 | `ImagePreprocessor` | Последнее фото / тест → 224×224 RGB8 ImageNet NCHW (150528 float) |
@@ -39,7 +41,7 @@ Ui (MainScene)
 
 ## Данные
 
-- Профиль и настройки — JSON в `user://`.
+- Профиль, настройки и пульс вопрошания — JSON в `user://` (timestamps шара на сервер не уходят).
 - Секреты GigaChat — `res://config/api.json` (как TrueTaro `.env`: Basic-ключ, Client ID, scope).
 - Модель — `res://models/mobilenetv2-7.onnx`, при старте копируется в `user://models/` (реальный путь для native ORT).
 - Якоря — `res://data/semantic_anchors.json` (60 позиций).

@@ -25,6 +25,7 @@ def fingerprint(body: OracleIn) -> str:
             snap.time_of_day,
             snap.ball_mood_modifier,
             snap.ball_tint_modifier,
+            snap.inquiry_pulse_aura,
         ]
     )
 

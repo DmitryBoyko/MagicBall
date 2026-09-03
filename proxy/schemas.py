@@ -21,6 +21,7 @@ class DynamicSnapshot(BaseModel):
     weather_state: str = ""
     device_battery_aura: str = ""
     device_power_state: str = ""
+    inquiry_pulse_aura: str = ""
     photo_mystic_tag: str = ""
     photo_color_palette: str = ""
     photo_luminance_vibe: str = ""

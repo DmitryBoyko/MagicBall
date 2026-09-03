@@ -51,6 +51,9 @@ public sealed class DynamicSnapshot
     [JsonPropertyName("device_power_state")]
     public string DevicePowerState { get; set; } = string.Empty;
 
+    [JsonPropertyName("inquiry_pulse_aura")]
+    public string InquiryPulseAura { get; set; } = string.Empty;
+
     [JsonPropertyName("photo_mystic_tag")]
     public string PhotoMysticTag { get; set; } = string.Empty;
 

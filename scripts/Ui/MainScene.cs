@@ -636,6 +636,7 @@ public partial class MainScene : Control
 
         await casting.ReportAsync(CastingStage.Battery);
         await casting.ReportAsync(CastingStage.Power);
+        await casting.ReportAsync(CastingStage.InquiryPulse);
 
         var photo = await PhotoSampler.AnalyzeRecentAsync(casting);
 
