@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 GameRoot="*res://scripts/App/GameRoot.cs"
 OnnxInferenceEngine="*res://scripts/Vision/OnnxInferenceEngine.cs"
 AudioService="*res://scripts/App/AudioService.cs"
+YandexAdsManager="*res://scripts/Ads/yandex_ads_manager.gd"
 
 [display]
 
@@ -38,6 +39,10 @@ window/handheld/orientation=1
 [dotnet]
 
 project/assembly_name="MagicBall"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/GodotAndroidYandexAds/plugin.cfg")
 
 [input_devices]
 

@@ -383,17 +383,30 @@ public partial class MainScene : Control
         ApplyOracleOutcome(_lastResult);
     }
 
-    private void ApplyOracleOutcome(OracleResult? result)
+    private async void ApplyOracleOutcome(OracleResult? result)
     {
-        if (result is { HasLlmAnswer: true })
+        if (result is not { HasLlmAnswer: true })
         {
-            SetBallLit(true);
-            SetSunActive(true);
-            _step = OracleStep.Answer;
-            RefreshActionButton();
+            ShowFog();
             return;
         }
 
+        var granted = await YandexAdsGate.ShowRequiredRewardedAsync(this, _ads);
+        if (!granted)
+        {
+            _lastResult = null;
+            ShowFog();
+            return;
+        }
+
+        SetBallLit(true);
+        SetSunActive(true);
+        _step = OracleStep.Answer;
+        RefreshActionButton();
+    }
+
+    private void ShowFog()
+    {
         SetSunActive(false);
         SetBallLit(false);
         _step = OracleStep.Ask;

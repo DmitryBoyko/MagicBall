@@ -3,12 +3,13 @@ using Godot;
 namespace CrystalBall.Ui;
 
 /// <summary>
-/// Полноэкранная симуляция AdMob/AppLovin. Пока она висит, крутится ONNX-воркер.
+/// Editor/desktop stand-in for Yandex rewarded. Early close fails the LLM reveal.
 /// </summary>
 public partial class AdOverlay : CanvasLayer
 {
     private Label _timer = null!;
-    private Button _skip = null!;
+    private Button _closeEarly = null!;
+    private Button _continue = null!;
     private MarginContainer? _pad;
     private float _left;
     private TaskCompletionSource<bool>? _done;
@@ -43,14 +44,23 @@ public partial class AdOverlay : CanvasLayer
         ApplySafeArea();
 
         box.AddChild(UiTheme.MakeLabel("Реклама", UiTheme.FontModalTitle, UiTheme.Gold));
-        box.AddChild(UiTheme.MakeLabel("Шар читает слепок кадра, пока идёт показ.", UiTheme.FontModalBody, UiTheme.Cream));
+        box.AddChild(UiTheme.MakeLabel(
+            "Досмотрите ролик до конца — иначе шар затянет туманом.",
+            UiTheme.FontModalBody,
+            UiTheme.Cream));
         _timer = UiTheme.MakeLabel("", UiTheme.FontModalBody, UiTheme.Cyan);
         box.AddChild(_timer);
-        _skip = UiTheme.MakeButton("Пропустить");
-        _skip.CustomMinimumSize = new Vector2(0, 64);
-        _skip.Visible = false;
-        _skip.Pressed += Finish;
-        box.AddChild(_skip);
+
+        _closeEarly = UiTheme.MakeQuietButton("Закрыть");
+        _closeEarly.CustomMinimumSize = new Vector2(0, 56);
+        _closeEarly.Pressed += () => Complete(false);
+        box.AddChild(_closeEarly);
+
+        _continue = UiTheme.MakeButton("Продолжить");
+        _continue.CustomMinimumSize = new Vector2(0, 64);
+        _continue.Visible = false;
+        _continue.Pressed += () => Complete(true);
+        box.AddChild(_continue);
 
         CyberFrameBorder.SetupModal(panel);
     }
@@ -62,12 +72,13 @@ public partial class AdOverlay : CanvasLayer
         SafeAreaHelper.Apply(_pad, this);
     }
 
-    public Task ShowAsync(float seconds = 5f)
+    public Task<bool> ShowRewardedAsync(float seconds = 5f)
     {
         _done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _left = seconds;
+        _left = Mathf.Max(1f, seconds);
         Visible = true;
-        _skip.Visible = false;
+        _closeEarly.Visible = true;
+        _continue.Visible = false;
         ApplySafeArea();
         SetProcess(true);
         return _done.Task;
@@ -78,15 +89,22 @@ public partial class AdOverlay : CanvasLayer
         if (!Visible)
             return;
         _left -= (float)delta;
-        _timer.Text = _left > 0 ? $"Осталось {Mathf.CeilToInt(_left)} с" : "Можно закрыть";
-        if (_left <= 0)
-            _skip.Visible = true;
+        if (_left > 0)
+        {
+            _timer.Text = $"Осталось {Mathf.CeilToInt(_left)} с";
+            return;
+        }
+
+        _timer.Text = "Ролик досмотрен";
+        _closeEarly.Visible = false;
+        _continue.Visible = true;
+        SetProcess(false);
     }
 
-    private void Finish()
+    private void Complete(bool granted)
     {
         Visible = false;
         SetProcess(false);
-        _done?.TrySetResult(true);
+        _done?.TrySetResult(granted);
     }
 }
