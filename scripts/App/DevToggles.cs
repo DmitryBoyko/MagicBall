@@ -8,4 +8,7 @@ public static class DevToggles
 {
     /// SUR-style photo warp; one emitter, pinned to the crystal ball.
     public const bool BackgroundWarpBehindBall = true;
+
+    /// Screen-background picker in Settings. Keep the OptionButton code; hide until ready.
+    public static readonly bool ShowBackgroundPresetInSettings = false;
 }

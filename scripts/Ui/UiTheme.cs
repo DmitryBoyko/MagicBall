@@ -14,6 +14,17 @@ public static class UiTheme
     public static readonly Color Dim = new(0.02f, 0.01f, 0.06f, 0.72f);
     public static readonly Color ModalDim = new(0f, 0f, 0f, 0.9f);
 
+    public const int FontModalTitle = 32;
+    public const int FontModalBody = 20;
+    public const int FontModalCaption = 18;
+    public const int FontModalInput = 24;
+    public const int FontModalButton = 24;
+    public const int FontModalTile = 22;
+    public const int FontReadingTitle = 36;
+    public const int FontReadingBody = 32;
+    public const int FontReadingSummary = 34;
+    public const int FontReadingButton = 28;
+
     public static Label MakeLabel(string text, int size, Color color, HorizontalAlignment align = HorizontalAlignment.Center)
     {
         var label = new Label
@@ -27,7 +38,7 @@ public static class UiTheme
         return label;
     }
 
-    public static Button MakeButton(string text, int fontSize = 22)
+    public static Button MakeButton(string text, int fontSize = FontModalButton)
     {
         var button = new Button
         {
@@ -65,9 +76,9 @@ public static class UiTheme
 
     public static Button MakeDateField(string text)
     {
-        var button = MakeButton(text, 20);
+        var button = MakeButton(text, FontModalTile);
         button.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        button.CustomMinimumSize = new Vector2(0, 56);
+        button.CustomMinimumSize = new Vector2(0, 64);
         var normal = TileBox(new Color(0.16f, 0.08f, 0.24f, 0.96f), Gold);
         var hover = TileBox(new Color(0.24f, 0.12f, 0.32f, 0.98f), Gold.Lightened(0.15f));
         var pressed = TileBox(new Color(0.32f, 0.14f, 0.38f, 1f), Cyan);
@@ -89,9 +100,9 @@ public static class UiTheme
             FocusMode = Control.FocusModeEnum.None,
             MouseDefaultCursorShape = Control.CursorShape.PointingHand,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0, 64),
+            CustomMinimumSize = new Vector2(0, 72),
         };
-        button.AddThemeFontSizeOverride("font_size", 20);
+        button.AddThemeFontSizeOverride("font_size", FontModalTile);
         button.AddThemeColorOverride("font_color", selected ? Gold.Lightened(0.12f) : Cream);
         button.AddThemeStyleboxOverride("normal", TileBox(bg, accent));
         button.AddThemeStyleboxOverride("hover", TileBox(bg.Lightened(0.08f), accent.Lightened(0.12f)));
@@ -177,10 +188,6 @@ public static class UiTheme
             CornerRadiusTopRight = r,
             CornerRadiusBottomLeft = r,
             CornerRadiusBottomRight = r,
-            ContentMarginLeft = 22,
-            ContentMarginRight = 22,
-            ContentMarginTop = 20,
-            ContentMarginBottom = 20,
         };
     }
 }

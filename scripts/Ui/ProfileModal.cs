@@ -84,21 +84,26 @@ public partial class ProfileModal : CanvasLayer
         _panel = new PanelContainer { CustomMinimumSize = new Vector2(620, 0) };
         center.AddChild(_panel);
 
+        var pad = CyberFrameBorder.CreateContentPad();
+        _panel.AddChild(pad);
+
         var box = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
         box.AddThemeConstantOverride("separation", 12);
-        _panel.AddChild(box);
+        box.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        pad.AddChild(box);
 
-        box.AddChild(UiTheme.MakeLabel("Настройки", 28, UiTheme.Gold));
+        box.AddChild(UiTheme.MakeLabel("Настройки", UiTheme.FontModalTitle, UiTheme.Gold));
         box.AddChild(UiTheme.MakeLabel(
             "Имя и дата рождения сохраняются только локально на этом устройстве.",
-            16, UiTheme.Cream));
+            UiTheme.FontModalBody, UiTheme.Cream));
 
-        box.AddChild(UiTheme.MakeLabel("Имя", 16, UiTheme.Cyan, HorizontalAlignment.Left));
+        box.AddChild(UiTheme.MakeLabel("Имя", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
         _name = new LineEdit { PlaceholderText = "Как к тебе обращаться" };
-        _name.AddThemeFontSizeOverride("font_size", 20);
+        _name.AddThemeFontSizeOverride("font_size", UiTheme.FontModalInput);
+        _name.CustomMinimumSize = new Vector2(0, 56);
         box.AddChild(_name);
 
-        box.AddChild(UiTheme.MakeLabel("Дата рождения", 16, UiTheme.Cyan, HorizontalAlignment.Left));
+        box.AddChild(UiTheme.MakeLabel("Дата рождения", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
         var dates = new HBoxContainer();
         dates.AddThemeConstantOverride("separation", 8);
         _dayBtn = UiTheme.MakeDateField("25");
@@ -114,25 +119,31 @@ public partial class ProfileModal : CanvasLayer
 
         if (_editMode)
         {
-            _music = CyberpunkLabeledSwitch.Create("Фоновая музыка", UiTheme.Magenta);
+            _music = CyberpunkLabeledSwitch.Create("Фоновая музыка", UiTheme.Magenta, UiTheme.FontModalButton);
             _music.Toggled += OnMusicToggled;
             box.AddChild(_music);
 
-            box.AddChild(UiTheme.MakeLabel("Фон экрана", 16, UiTheme.Cyan, HorizontalAlignment.Left));
-            _background = new OptionButton();
-            _background.AddItem("Авто (по времени суток)", 0);
-            _background.AddItem("Утро", 1);
-            _background.AddItem("День", 2);
-            _background.AddItem("Вечер", 3);
-            _background.AddItem("Ночь", 4);
-            box.AddChild(_background);
+            if (DevToggles.ShowBackgroundPresetInSettings)
+            {
+                box.AddChild(UiTheme.MakeLabel("Фон экрана", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
+                _background = new OptionButton();
+                _background.AddThemeFontSizeOverride("font_size", UiTheme.FontModalInput);
+                _background.AddItem("Авто (по времени суток)", 0);
+                _background.AddItem("Утро", 1);
+                _background.AddItem("День", 2);
+                _background.AddItem("Вечер", 3);
+                _background.AddItem("Ночь", 4);
+                box.AddChild(_background);
+            }
         }
 
         _save = UiTheme.MakeButton("Сохранить");
+        _save.CustomMinimumSize = new Vector2(0, 64);
         _save.Pressed += OnSave;
         box.AddChild(_save);
 
         _close = UiTheme.MakeButton("Закрыть");
+        _close.CustomMinimumSize = new Vector2(0, 64);
         _close.Pressed += HideModal;
         box.AddChild(_close);
 
@@ -325,7 +336,7 @@ public partial class ProfileModal : CanvasLayer
     {
         var col = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         col.AddThemeConstantOverride("separation", 4);
-        col.AddChild(UiTheme.MakeLabel(caption, 14, UiTheme.Cyan));
+        col.AddChild(UiTheme.MakeLabel(caption, UiTheme.FontModalCaption, UiTheme.Cyan));
         col.AddChild(field);
         return col;
     }

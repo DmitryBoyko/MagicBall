@@ -20,6 +20,9 @@ public partial class CyberFrameBorder : ColorRect
     private const float CornerRadiusMaxPx = 48f;
     private const float ContentCurveInsetRatio = 0.04f;
 
+    public const string ContentMarginName = "ContentMargin";
+    public const int ModalContentPadMin = 32;
+
     public event Action<int>? FrameInsetChanged;
 
     private float _hueSeed = -1f;
@@ -74,10 +77,87 @@ public partial class CyberFrameBorder : ColorRect
     {
         if (panel == null)
             return;
-        panel.AddThemeStyleboxOverride("panel", UiTheme.ModalShell());
+
+        var pad = EnsureContentMargin(panel);
         var frame = AttachTo(panel);
-        frame.FrameInsetChanged += _ => SyncModalCorners(panel, frame);
-        SyncModalCorners(panel, frame);
+        ApplyContentInset(pad, frame);
+        frame.FrameInsetChanged += _ => ApplyContentInset(pad, frame);
+        frame.CallDeferred(MethodName.ReapplySiblingPad);
+    }
+
+    public static MarginContainer CreateContentPad()
+    {
+        var pad = new MarginContainer
+        {
+            Name = ContentMarginName,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        ApplyPad(pad, ModalContentPadMin);
+        return pad;
+    }
+
+    private void ReapplySiblingPad()
+    {
+        if (GetParent() is not PanelContainer panel)
+            return;
+        var pad = panel.GetNodeOrNull<MarginContainer>(ContentMarginName);
+        if (pad == null)
+            return;
+        ApplyContentInset(pad, this);
+    }
+
+    private static void ApplyContentInset(MarginContainer pad, CyberFrameBorder frame)
+    {
+        if (pad.GetParent() is PanelContainer panel)
+            SyncModalCorners(panel, frame);
+        var m = Mathf.Max(frame.GetFrameInsetPx() + 8, ModalContentPadMin);
+        ApplyPad(pad, m);
+    }
+
+    private static void ApplyPad(MarginContainer pad, int px)
+    {
+        pad.AddThemeConstantOverride("margin_left", px);
+        pad.AddThemeConstantOverride("margin_top", px);
+        pad.AddThemeConstantOverride("margin_right", px);
+        pad.AddThemeConstantOverride("margin_bottom", px);
+    }
+
+    private static MarginContainer EnsureContentMargin(PanelContainer panel)
+    {
+        var pad = panel.GetNodeOrNull<MarginContainer>(ContentMarginName);
+        if (pad != null)
+            return pad;
+
+        pad = new MarginContainer
+        {
+            Name = ContentMarginName,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+
+        var moved = new List<Node>();
+        foreach (var child in panel.GetChildren())
+        {
+            if (child is CyberFrameBorder)
+                continue;
+            moved.Add(child);
+        }
+
+        panel.AddChild(pad);
+        foreach (var child in moved)
+        {
+            panel.RemoveChild(child);
+            if (child is Control control)
+            {
+                control.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+                control.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+            }
+
+            pad.AddChild(child);
+        }
+
+        return pad;
     }
 
     private static void BringToFront(Control host, CyberFrameBorder frame)

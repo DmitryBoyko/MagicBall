@@ -29,19 +29,25 @@ public partial class AdOverlay : CanvasLayer
         panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _pad.AddChild(panel);
 
+        var content = CyberFrameBorder.CreateContentPad();
+        panel.AddChild(content);
+
         var box = new VBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.Center,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
         };
         box.AddThemeConstantOverride("separation", 16);
-        panel.AddChild(box);
+        content.AddChild(box);
         ApplySafeArea();
 
-        box.AddChild(UiTheme.MakeLabel("Реклама", 34, UiTheme.Gold));
-        box.AddChild(UiTheme.MakeLabel("Шар читает слепок кадра, пока идёт показ.", 18, UiTheme.Cream));
-        _timer = UiTheme.MakeLabel("", 20, UiTheme.Cyan);
+        box.AddChild(UiTheme.MakeLabel("Реклама", UiTheme.FontModalTitle, UiTheme.Gold));
+        box.AddChild(UiTheme.MakeLabel("Шар читает слепок кадра, пока идёт показ.", UiTheme.FontModalBody, UiTheme.Cream));
+        _timer = UiTheme.MakeLabel("", UiTheme.FontModalBody, UiTheme.Cyan);
         box.AddChild(_timer);
         _skip = UiTheme.MakeButton("Пропустить");
+        _skip.CustomMinimumSize = new Vector2(0, 64);
         _skip.Visible = false;
         _skip.Pressed += Finish;
         box.AddChild(_skip);

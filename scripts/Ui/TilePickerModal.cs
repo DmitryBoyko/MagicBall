@@ -45,11 +45,15 @@ public partial class TilePickerModal : CanvasLayer
         _panel = new PanelContainer { CustomMinimumSize = new Vector2(620, 0) };
         center.AddChild(_panel);
 
+        var pad = CyberFrameBorder.CreateContentPad();
+        _panel.AddChild(pad);
+
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 14);
-        _panel.AddChild(box);
+        box.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        pad.AddChild(box);
 
-        _title = UiTheme.MakeLabel("", 26, UiTheme.Gold);
+        _title = UiTheme.MakeLabel("", UiTheme.FontModalTitle, UiTheme.Gold);
         box.AddChild(_title);
 
         _scroll = new ScrollContainer
@@ -69,6 +73,7 @@ public partial class TilePickerModal : CanvasLayer
         _scroll.AddChild(_grid);
 
         var back = UiTheme.MakeButton("Назад");
+        back.CustomMinimumSize = new Vector2(0, 64);
         back.Pressed += Hide;
         box.AddChild(back);
 
@@ -99,7 +104,9 @@ public partial class TilePickerModal : CanvasLayer
         foreach (var child in _grid.GetChildren())
             child.Free();
 
-        var gridW = (_panel?.CustomMinimumSize.X ?? 620f) - 44f;
+        var pad = _panel?.GetNodeOrNull<MarginContainer>(CyberFrameBorder.ContentMarginName);
+        var inset = pad != null ? pad.GetThemeConstant("margin_left") : 22;
+        var gridW = (_panel?.CustomMinimumSize.X ?? 620f) - inset * 2f;
         _grid.CustomMinimumSize = new Vector2(gridW, 0f);
 
         foreach (var item in items)

@@ -32,6 +32,14 @@ public partial class MainScene : Control
     private ContextManager _context = null!;
     private readonly BackgroundController _backgrounds = new();
     private OracleResult? _lastResult;
+    private bool _oracleBusy;
+    private Tween? _introTween;
+    private bool _introStarted;
+    private bool _introFinished;
+    private Vector2 _ballTarget;
+    private float _sparkPad;
+    private ulong _introStartMsec;
+    private const float IntroSeconds = 2.4f;
 
     public override void _Ready()
     {
@@ -83,8 +91,9 @@ public partial class MainScene : Control
             StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = MouseFilterEnum.Ignore,
             Texture = MakeWhiteTexture(),
+            Visible = false,
         };
-        _sparks = new BallSparks { MouseFilter = MouseFilterEnum.Ignore };
+        _sparks = new BallSparks { MouseFilter = MouseFilterEnum.Ignore, Visible = false };
         var shader = LoadBallShader();
         if (shader != null)
         {
@@ -113,8 +122,9 @@ public partial class MainScene : Control
 
         bottom.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
 
-        _ask = UiTheme.MakeButton("Спросить Оракула", 24);
+        _ask = UiTheme.MakeButton("Спросить", 24);
         _ask.CustomMinimumSize = new Vector2(0, 64);
+        _ask.Disabled = true;
         _ask.Pressed += OnAskPressed;
         bottom.AddChild(_ask);
 
@@ -171,14 +181,102 @@ public partial class MainScene : Control
         var ballSize = Mathf.Min(safe.Size.X * 0.88f, safe.Size.Y * 0.56f);
         var left = safe.Position.X + (safe.Size.X - ballSize) * 0.5f;
         var top = safe.Position.Y + safe.Size.Y * 0.02f;
-        _ball.Position = new Vector2(left, top);
         _ball.Size = new Vector2(ballSize, ballSize);
-        var sparkPad = ballSize * 0.18f;
-        _sparks.Position = new Vector2(left - sparkPad, top - sparkPad);
-        _sparks.Size = new Vector2(ballSize + sparkPad * 2f, ballSize + sparkPad * 2f);
+        _sparkPad = ballSize * 0.18f;
+        _sparks.Size = new Vector2(ballSize + _sparkPad * 2f, ballSize + _sparkPad * 2f);
         _sparks.SetBallRadius(ballSize * 0.5f);
         _vortex.SyncSize(GetViewportRect().Size);
         _warp?.SetEnabled(WarpBackgroundBehindBall);
+
+        _ballTarget = new Vector2(left, top);
+        if (ballSize < 8f)
+            return;
+
+        if (!_introStarted)
+        {
+            StartBallIntro();
+            return;
+        }
+
+        if (!_introFinished)
+        {
+            var elapsed = (Time.GetTicksMsec() - _introStartMsec) / 1000f;
+            TweenBallToTarget(Mathf.Max(0.45f, IntroSeconds - elapsed));
+            return;
+        }
+
+        PlaceBallCluster(_ballTarget);
+    }
+
+    private void StartBallIntro()
+    {
+        _introStarted = true;
+        _introStartMsec = Time.GetTicksMsec();
+        var vp = GetViewportRect().Size;
+        if (vp.X < 8f || vp.Y < 8f)
+            vp = Size;
+
+        var rng = new RandomNumberGenerator();
+        rng.Randomize();
+        var start = OffscreenStart(_ballTarget, _ball.Size, vp, rng.RandiRange(0, 3));
+        PlaceBallCluster(start);
+        _ball.Visible = true;
+        _sparks.Visible = true;
+        TweenBallToTarget(IntroSeconds);
+    }
+
+    private void TweenBallToTarget(float seconds)
+    {
+        if (seconds <= 0.08f)
+        {
+            PlaceBallCluster(_ballTarget);
+            OnIntroFinished();
+            return;
+        }
+
+        _introTween?.Kill();
+        _introTween = CreateTween();
+        _introTween.SetParallel(true);
+        _introTween.SetEase(Tween.EaseType.Out);
+        _introTween.SetTrans(Tween.TransitionType.Cubic);
+        _introTween.TweenProperty(_ball, "position", _ballTarget, seconds);
+        _introTween.TweenProperty(_sparks, "position", SparkPosFor(_ballTarget), seconds);
+        _introTween.Finished += OnIntroFinished;
+    }
+
+    private void OnIntroFinished()
+    {
+        if (_introFinished)
+            return;
+        _introFinished = true;
+        RefreshAskEnabled();
+    }
+
+    private void RefreshAskEnabled()
+    {
+        if (_ask == null)
+            return;
+        _ask.Disabled = !_introFinished || _oracleBusy;
+    }
+
+    private void PlaceBallCluster(Vector2 ballPos)
+    {
+        _ball.Position = ballPos;
+        _sparks.Position = SparkPosFor(ballPos);
+    }
+
+    private Vector2 SparkPosFor(Vector2 ballPos) => ballPos - new Vector2(_sparkPad, _sparkPad);
+
+    private static Vector2 OffscreenStart(Vector2 target, Vector2 ballSize, Vector2 viewport, int side)
+    {
+        const float gap = 48f;
+        return side switch
+        {
+            0 => new Vector2(target.X, -ballSize.Y - gap),
+            1 => new Vector2(target.X, viewport.Y + gap),
+            2 => new Vector2(-ballSize.X - gap, target.Y),
+            _ => new Vector2(viewport.X + gap, target.Y),
+        };
     }
 
     private void ApplyBackground()
@@ -228,13 +326,17 @@ public partial class MainScene : Control
 
     private async void OnAskPressed()
     {
+        if (!_introFinished)
+            return;
+
         if (ProfileStore.Current is not { IsComplete: true } profile)
         {
             _modal.Present(editMode: false);
             return;
         }
 
-        _ask.Disabled = true;
+        _oracleBusy = true;
+        RefreshAskEnabled();
         _openReading.Visible = false;
         _lastResult = null;
 
@@ -258,7 +360,8 @@ public partial class MainScene : Control
             };
         }
 
-        _ask.Disabled = false;
+        _oracleBusy = false;
+        RefreshAskEnabled();
         _openReading.Visible = true;
     }
 

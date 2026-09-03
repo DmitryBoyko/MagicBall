@@ -32,7 +32,9 @@ public static class AppSettingsStore
 
         try
         {
-            Current = JsonSerializer.Deserialize<AppSettings>(file.GetAsText()) ?? new AppSettings();
+            var json = file.GetAsText();
+            Current = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            ApplyMissingDefaults(json);
         }
         catch (Exception ex)
         {
@@ -54,5 +56,19 @@ public static class AppSettingsStore
         }
 
         file.StoreString(JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void ApplyMissingDefaults(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("MusicEnabled", out _))
+                Current.MusicEnabled = true;
+        }
+        catch (Exception)
+        {
+            Current.MusicEnabled = true;
+        }
     }
 }

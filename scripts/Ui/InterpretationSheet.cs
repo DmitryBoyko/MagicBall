@@ -28,11 +28,16 @@ public partial class InterpretationSheet : CanvasLayer
         panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _margin.AddChild(panel);
 
+        var pad = CyberFrameBorder.CreateContentPad();
+        panel.AddChild(pad);
+
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 22);
-        panel.AddChild(box);
+        box.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        box.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        pad.AddChild(box);
 
-        box.AddChild(UiTheme.MakeLabel("Толкование шара", 52, UiTheme.Gold));
+        box.AddChild(UiTheme.MakeLabel("Толкование шара", UiTheme.FontReadingTitle, UiTheme.Gold));
 
         var scroll = new ScrollContainer
         {
@@ -46,14 +51,14 @@ public partial class InterpretationSheet : CanvasLayer
         text.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         scroll.AddChild(text);
 
-        _body = UiTheme.MakeLabel("", 36, UiTheme.Cream);
+        _body = UiTheme.MakeLabel("", UiTheme.FontReadingBody, UiTheme.Cream);
         _body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         text.AddChild(_body);
-        _summary = UiTheme.MakeLabel("", 40, UiTheme.Gold);
+        _summary = UiTheme.MakeLabel("", UiTheme.FontReadingSummary, UiTheme.Gold);
         _summary.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         text.AddChild(_summary);
 
-        var close = UiTheme.MakeButton("Закрыть", 44);
+        var close = UiTheme.MakeButton("Закрыть", UiTheme.FontReadingButton);
         close.CustomMinimumSize = new Vector2(0, 88);
         close.Pressed += Hide;
         box.AddChild(close);
