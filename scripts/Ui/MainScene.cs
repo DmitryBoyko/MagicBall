@@ -191,11 +191,10 @@ public partial class MainScene : Control
         material.SetShaderParameter("tumble", rng.RandfRange(0.18f, 0.55f));
         material.SetShaderParameter("light_drift", rng.RandfRange(0.22f, 0.55f));
         material.SetShaderParameter("glass_reflection", rng.RandfRange(0.42f, 0.68f));
-        var cyan = new Color(0.05f, 0.92f, 0.85f).Lerp(new Color(0.2f, 0.7f, 1f), rng.Randf());
-        var violet = new Color(0.62f, 0.12f, 0.95f).Lerp(new Color(0.9f, 0.2f, 0.7f), rng.Randf());
-        material.SetShaderParameter("fog_color_1", cyan);
-        material.SetShaderParameter("fog_color_2", violet);
-        _sparks?.Configure(spinSign, fogSpeed, cyan, violet);
+        var palette = BallPaletteCatalog.Pick(rng);
+        material.SetShaderParameter("fog_color_1", palette.FogA);
+        material.SetShaderParameter("fog_color_2", palette.FogB);
+        _sparks?.Configure(spinSign, fogSpeed, palette.FogA, palette.FogB);
     }
 
     private static Shader? LoadBallShader()

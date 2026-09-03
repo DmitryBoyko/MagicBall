@@ -72,8 +72,8 @@ void fragment() {
 	glass += mix(fog_color_1.rgb, fog_color_2.rgb, 0.45) * (1.0 - r) * 0.18;
 
 	float fresnel = pow(1.0 - z, 2.4) * glass_reflection;
-	glass += vec3(0.45, 0.82, 1.0) * fresnel;
-	glass += vec3(0.85, 0.40, 1.0) * fresnel * 0.4;
+	glass += fog_color_1.rgb * fresnel;
+	glass += fog_color_2.rgb * fresnel * 0.45;
 
 	float wander = TIME * (0.16 + light_drift * 0.22) + seed * 1.7;
 	vec3 light1 = normalize(vec3(
@@ -89,7 +89,7 @@ void fragment() {
 	float spec = pow(max(dot(n, light1), 0.0), 40.0);
 	float spec2 = pow(max(dot(n, light2), 0.0), 14.0) * 0.28;
 	float bloom = pow(max(dot(n, light1), 0.0), 8.0) * 0.12;
-	glass += vec3(1.0) * spec * 0.72 + vec3(0.7, 0.9, 1.0) * spec2 + vec3(0.85, 0.75, 1.0) * bloom;
+	glass += vec3(1.0) * spec * 0.62 + mix(fog_color_1.rgb, vec3(1.0), 0.55) * spec2 + fog_color_2.rgb * bloom;
 
 	float alpha = sphere * (opacity + fog_a * 0.18 + fresnel * 0.22);
 	COLOR = vec4(glass, clamp(alpha, 0.0, 0.82));
