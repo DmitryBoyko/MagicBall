@@ -12,13 +12,13 @@ copy proxy\env.example proxy\.env
 # вставьте GIGACHAT_CREDENTIALS
 pip install -r proxy\requirements.txt
 $env:PYTHONPATH="C:\epm-games\MagicalBall"
-uvicorn proxy.main:app --host 127.0.0.1 --port 17879
+uvicorn proxy.main:app --host 127.0.0.1 --port 18437
 ```
 
-Godot (редактор): `config/api.json` → `proxy_base_url` = `http://127.0.0.1:17879`
+Godot (редактор): `config/api.json` → `proxy_base_url` = `http://127.0.0.1:18437`
 
 ## VPS (свой стек, рядом с TrueTaro)
 
-Не маршрут внутри TrueTaro. Отдельный compose в `/opt/magicalball`, хостовый порт **17879**.
+Отдельный compose в `/opt/magicalball`, хостовый порт **18437**, IP **147.45.173.26**.
 
-Android: `android_base_url` = `http://147.45.173.26:17879` (пример: `config/api.prod.example.json`).
+Android: `android_base_url` = `http://147.45.173.26:18437` (см. `config/api.prod.example.json`).

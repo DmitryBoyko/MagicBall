@@ -66,10 +66,10 @@ public sealed class AppConfig
     public string OtherAppsUrl { get; set; } = "https://www.rustore.ru/catalog/developer/9cf9ks";
 
     [JsonPropertyName("proxy_base_url")]
-    public string ProxyBaseUrl { get; set; } = "http://127.0.0.1:17879";
+    public string ProxyBaseUrl { get; set; } = "http://127.0.0.1:18437";
 
     [JsonPropertyName("android_base_url")]
-    public string AndroidBaseUrl { get; set; } = "http://147.45.173.26:17878";
+    public string AndroidBaseUrl { get; set; } = "http://147.45.173.26:18437";
 
     [JsonPropertyName("vortex_seconds")]
     public float VortexSeconds { get; set; } = DefaultVortexSeconds;

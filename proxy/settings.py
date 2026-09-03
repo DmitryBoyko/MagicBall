@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     )
 
     host: str = Field(default="0.0.0.0", alias="PROXY_HOST")
-    port: int = Field(default=17879, alias="API_PORT")
+    port: int = Field(default=18437, alias="API_PORT")
     ai_queue_timeout: float = Field(default=5.0, alias="AI_QUEUE_TIMEOUT")
     ai_queue_max_depth: int = Field(default=2, alias="AI_QUEUE_MAX_DEPTH")
     ai_timeout_seconds: float = Field(default=20.0, alias="AI_TIMEOUT_SECONDS")

@@ -1,7 +1,7 @@
 # MagicalBall VPS — proxy only. Public: http://VPS_IP:API_PORT
 #
 # Inside the container the app always listens on 8000.
-# API_PORT is the HOST port (Godot). Default 17879 — TrueTaro uses 17878 on the same VPS.
+# API_PORT is the HOST port (Godot). Default 18437 — TrueTaro uses 17878 on the same VPS.
 # restart: unless-stopped — container returns after `systemctl restart docker` / reboot
 # if it was running (not if you explicitly `compose stop`).
 #
@@ -36,7 +36,7 @@ services:
     volumes:
       - magicalball_cache:/app/proxy/data
     ports:
-      - "${API_PORT:-17879}:8000"
+      - "${API_PORT:-18437}:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
