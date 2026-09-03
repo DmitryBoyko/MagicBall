@@ -161,7 +161,11 @@ public partial class InterpretationSheet : CanvasLayer
 
         if (OS.GetName() == "Android" || OS.HasFeature("Android"))
         {
-            GalleryShare.Launch(this, path, "Поделиться предсказанием");
+            GalleryShare.Launch(
+                this,
+                path,
+                "Поделиться предсказанием",
+                ReadingShareExport.ShareCaption(_summary.Text));
             return;
         }
 

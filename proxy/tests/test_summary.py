@@ -38,3 +38,15 @@ def test_strip_markup_drops_markdown_and_brackets() -> None:
     assert "Иди дальше" in cleaned
     assert "не" in cleaned
     assert "оглядывайся" in cleaned
+
+
+def test_strip_markup_drops_leaked_itog_word() -> None:
+    cleaned = strip_markup("Держи курс.\nИТОГ\nШаг за шагом")
+    assert "ИТОГ" not in cleaned.upper()
+    assert "Шаг за шагом" in cleaned
+
+
+def test_extract_summary_plain_itog_line() -> None:
+    body, summary = extract_summary("Держи курс мягко.\nИТОГ\nШаг за шагом")
+    assert "ИТОГ" not in body.upper()
+    assert summary == "Шаг за шагом"

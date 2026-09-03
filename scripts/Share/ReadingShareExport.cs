@@ -1,18 +1,33 @@
+using CrystalBall.App;
 using Godot;
 
 namespace CrystalBall.Share;
 
 /// <summary>
-/// PNG для шаринга: скрин игрового экрана (без модалки) → текст ответа → «ВОЛШЕБНЫЙ ШАР».
+/// PNG для шаринга: скрин с оверлеем «Волшебный шар» → текст ответа → бренд + RuStore.
 /// </summary>
 public static class ReadingShareExport
 {
-    public const string Brand = "ВОЛШЕБНЫЙ ШАР";
+    public const string Brand = "Волшебный шар";
+    public const string DefaultStoreUrl = "https://www.rustore.ru/catalog/developer/9cf9ks";
+    private const string TitleFontPath = "res://fonts/Philosopher-Bold.ttf";
     private const int Width = 1080;
     private const int Pad = 48;
     private static readonly Color Bg = new(0.04f, 0.03f, 0.11f, 1f);
     private static readonly Color Cream = new(0.918f, 0.890f, 0.824f);
     private static readonly Color Gold = new(0.902f, 0.761f, 0.290f);
+    private static readonly Color TitleShadow = new(0.06f, 0.03f, 0.14f, 0.92f);
+
+    public static string StoreUrl =>
+        string.IsNullOrWhiteSpace(AppConfig.Current?.OtherAppsUrl)
+            ? DefaultStoreUrl
+            : AppConfig.Current.OtherAppsUrl.Trim();
+
+    public static string ShareCaption(string summary = "")
+    {
+        var line = string.IsNullOrWhiteSpace(summary) ? Brand : summary.Trim();
+        return $"{line}\n\n{Brand}\n{StoreUrl}";
+    }
 
     public static async Task<string> ExportAsync(Node host, Image screenshot, string body, string summary)
     {
@@ -28,7 +43,7 @@ public static class ReadingShareExport
         if (screenshot.GetFormat() != Image.Format.Rgba8)
             screenshot.Convert(Image.Format.Rgba8);
         var shotTex = ImageTexture.CreateFromImage(screenshot);
-
+        var titleFont = LoadTitleFont();
         var shareBody = CombineText(body, summary);
 
         var vp = new SubViewport
@@ -55,14 +70,7 @@ public static class ReadingShareExport
         col.AddThemeConstantOverride("separation", 28);
         margin.AddChild(col);
 
-        var art = new TextureRect
-        {
-            Texture = shotTex,
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(innerW, shotH),
-        };
-        col.AddChild(art);
+        col.AddChild(BuildShotWithTitle(shotTex, titleFont, innerW, shotH));
 
         if (!string.IsNullOrWhiteSpace(shareBody))
         {
@@ -85,13 +93,27 @@ public static class ReadingShareExport
             HorizontalAlignment = HorizontalAlignment.Center,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
-        brand.AddThemeFontSizeOverride("font_size", 34);
+        if (titleFont != null)
+            brand.AddThemeFontOverride("font", titleFont);
+        brand.AddThemeFontSizeOverride("font_size", 48);
         brand.AddThemeColorOverride("font_color", Gold);
         col.AddChild(brand);
 
+        var store = new Label
+        {
+            Text = StoreUrl,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(innerW, 0),
+        };
+        store.AddThemeFontSizeOverride("font_size", 28);
+        store.AddThemeColorOverride("font_color", new Color(Gold.R, Gold.G, Gold.B, 0.85f));
+        col.AddChild(store);
+
         await host.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await host.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-        var contentH = Mathf.Max(shotH + 280, Mathf.CeilToInt(col.GetCombinedMinimumSize().Y) + Pad * 2 + 8);
+        var contentH = Mathf.Max(shotH + 360, Mathf.CeilToInt(col.GetCombinedMinimumSize().Y) + Pad * 2 + 8);
         vp.Size = new Vector2I(Width, contentH);
         root.Size = new Vector2(Width, contentH);
         await host.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
@@ -127,6 +149,72 @@ public static class ReadingShareExport
         if (OS.HasFeature("Android"))
             return OS.GetUserDataDir().PathJoin(fileName);
         return ProjectSettings.GlobalizePath(userPath);
+    }
+
+    private static Control BuildShotWithTitle(Texture2D shotTex, Font? titleFont, int innerW, int shotH)
+    {
+        var frame = new Control
+        {
+            CustomMinimumSize = new Vector2(innerW, shotH),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipContents = true,
+        };
+
+        var art = new TextureRect
+        {
+            Texture = shotTex,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        art.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        frame.AddChild(art);
+
+        var veil = new ColorRect
+        {
+            Color = new Color(0.04f, 0.02f, 0.10f, 0.28f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        veil.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        frame.AddChild(veil);
+
+        var title = new Label
+        {
+            Text = Brand,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        title.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        title.OffsetTop = shotH * 0.08f;
+        title.OffsetBottom = -shotH * 0.55f;
+        if (titleFont != null)
+            title.AddThemeFontOverride("font", titleFont);
+        title.AddThemeFontSizeOverride("font_size", 96);
+        title.AddThemeColorOverride("font_color", Gold);
+        title.AddThemeColorOverride("font_outline_color", TitleShadow);
+        title.AddThemeConstantOverride("outline_size", 14);
+        title.AddThemeColorOverride("font_shadow_color", TitleShadow);
+        title.AddThemeConstantOverride("shadow_offset_x", 0);
+        title.AddThemeConstantOverride("shadow_offset_y", 6);
+        frame.AddChild(title);
+
+        return frame;
+    }
+
+    private static FontFile? LoadTitleFont()
+    {
+        if (!ResourceLoader.Exists(TitleFontPath) && !FileAccess.FileExists(TitleFontPath))
+            return null;
+
+        var loaded = GD.Load<FontFile>(TitleFontPath);
+        if (loaded != null)
+            return loaded;
+
+        var font = new FontFile();
+        var err = font.LoadDynamicFont(TitleFontPath);
+        return err == Error.Ok ? font : null;
     }
 
     private static string CombineText(string body, string summary)

@@ -6,7 +6,7 @@ public static class GalleryShare
 {
     private const string ScriptPath = "res://scripts/Share/android_gallery_share.gd";
 
-    public static void Launch(Node host, string absoluteImagePath, string chooserTitle)
+    public static void Launch(Node host, string absoluteImagePath, string chooserTitle, string shareText = "")
     {
         var script = GD.Load<GDScript>(ScriptPath);
         if (script == null)
@@ -17,6 +17,6 @@ public static class GalleryShare
         }
 
         var instance = script.New().AsGodotObject();
-        instance.Call("launch", host, absoluteImagePath, chooserTitle);
+        instance.Call("launch", host, absoluteImagePath, chooserTitle, shareText ?? "");
     }
 }

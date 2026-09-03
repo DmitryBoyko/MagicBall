@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 
 _MARKER_RE = re.compile(
-    r"(?:\*{1,2}|_{1,2})?\[\[\s*итог\s*\]\](?:\*{1,2}|_{1,2})?",
-    re.IGNORECASE,
+    r"(?im)(?:\*{1,2}|_{1,2})?\[\[\s*итог\s*\]\](?:\*{1,2}|_{1,2})?|^\s*итог\s*$",
 )
+_ITOG_LINE_RE = re.compile(r"(?mi)^\s*итог\s*[:.—–\-]*\s*$")
+_ITOG_LEAD_RE = re.compile(r"(?mi)^\s*итог\s*[:.—–\-]+\s*")
+_ITOG_AFTER_NL_RE = re.compile(r"(?mi)(?<=\n)\s*итог\s*[:.—–\-]+\s*")
 _LEAD_PUNCT_RE = re.compile(r"^[\s:;—–\-]+")
 _TRAIL_BRACKETS_RE = re.compile(r"\[\[\s*([^\[\]]+?)\s*\]\]\s*$")
 _DOUBLE_BRACKETS_RE = re.compile(r"\[\[\s*(.*?)\s*\]\]", re.DOTALL)
@@ -16,10 +18,19 @@ _VISIBLE_RE = re.compile(
 )
 
 
+def _strip_itog_label(text: str) -> str:
+    cleaned = _MARKER_RE.sub("", text)
+    cleaned = _ITOG_LINE_RE.sub("", cleaned)
+    cleaned = _ITOG_LEAD_RE.sub("", cleaned)
+    cleaned = _ITOG_AFTER_NL_RE.sub("\n", cleaned)
+    return cleaned
+
+
 def strip_markup(text: str) -> str:
     if not text:
         return ""
     cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = _MARKER_RE.sub("", cleaned)
     cleaned = re.sub(r"```(?:\w+)?\n?([\s\S]*?)```", r"\1", cleaned)
     cleaned = cleaned.replace("```", "")
     cleaned = re.sub(r"`+", "", cleaned)
@@ -34,6 +45,7 @@ def strip_markup(text: str) -> str:
     cleaned = re.sub(r"(?m)^\s*(?:[-+•]|\d+[.)])\s+", "", cleaned)
     cleaned = _VISIBLE_RE.sub("", cleaned)
     cleaned = cleaned.replace("_", "")
+    cleaned = _strip_itog_label(cleaned)
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r" {2,}", " ", cleaned)
@@ -77,6 +89,8 @@ def extract_summary(text: str) -> tuple[str, str]:
     summary = strip_markup(summary)
     if len(summary) > 300:
         summary = summary[:300].strip()
+    if summary.casefold() == "итог":
+        summary = ""
     return strip_markup(body), summary
 
 

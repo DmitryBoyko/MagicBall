@@ -68,6 +68,8 @@ public static partial class SummaryExtractor
         summary = StripMarkup(summary);
         if (summary.Length > 300)
             summary = summary[..300].Trim();
+        if (IsItogOnly(summary))
+            summary = string.Empty;
 
         return (StripMarkup(body), summary);
     }
@@ -78,6 +80,7 @@ public static partial class SummaryExtractor
             return string.Empty;
 
         var cleaned = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        cleaned = MarkerRegex.Replace(cleaned, string.Empty);
         cleaned = Regex.Replace(cleaned, @"```(?:\w+)?\n?([\s\S]*?)```", "$1");
         cleaned = cleaned.Replace("```", string.Empty);
         cleaned = Regex.Replace(cleaned, "`+", string.Empty);
@@ -92,10 +95,23 @@ public static partial class SummaryExtractor
         cleaned = Regex.Replace(cleaned, @"(?m)^\s*(?:[-+•]|\d+[.)])\s+", string.Empty);
         cleaned = VisibleOnly.Replace(cleaned, string.Empty);
         cleaned = cleaned.Replace("_", string.Empty);
+        cleaned = StripItogLabel(cleaned);
         cleaned = ExtraLines.Replace(cleaned.Replace(" \n", "\n"), "\n\n");
         cleaned = ExtraSpaces.Replace(cleaned, " ");
         return cleaned.Trim();
     }
+
+    private static string StripItogLabel(string text)
+    {
+        var cleaned = MarkerRegex.Replace(text, string.Empty);
+        cleaned = Regex.Replace(cleaned, @"(?mi)^\s*итог\s*[:.—–\-]*\s*$", string.Empty);
+        cleaned = Regex.Replace(cleaned, @"(?mi)^\s*итог\s*[:.—–\-]+\s*", string.Empty);
+        cleaned = Regex.Replace(cleaned, @"(?mi)(?<=\n)\s*итог\s*[:.—–\-]+\s*", "\n");
+        return cleaned;
+    }
+
+    private static bool IsItogOnly(string text) =>
+        text.Equals("итог", StringComparison.OrdinalIgnoreCase);
 
     private static string UnwrapBrackets(string text)
     {
@@ -110,6 +126,8 @@ public static partial class SummaryExtractor
         return SingleBrackets.Replace(cleaned, "$1");
     }
 
-    [GeneratedRegex(@"(?:\*{1,2}|_{1,2})?\[\[\s*итог\s*\]\](?:\*{1,2}|_{1,2})?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        @"(?:\*{1,2}|_{1,2})?\[\[\s*итог\s*\]\](?:\*{1,2}|_{1,2})?|(?m)^\s*итог\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
     private static partial Regex BuildMarkerRegex();
 }

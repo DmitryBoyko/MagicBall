@@ -4,6 +4,8 @@ extends RefCounted
 const ACTION_SEND := "android.intent.action.SEND"
 const ACTION_ATTACH_DATA := "android.intent.action.ATTACH_DATA"
 const EXTRA_STREAM := "android.intent.extra.STREAM"
+const EXTRA_TEXT := "android.intent.extra.TEXT"
+const EXTRA_SUBJECT := "android.intent.extra.SUBJECT"
 const FLAG_GRANT_READ_URI_PERMISSION := 1
 const FLAG_ACTIVITY_NEW_TASK := 0x10000000
 const LOG_TAG := "[GalleryAndroid]"
@@ -30,7 +32,7 @@ static func log_info(message: String) -> void:
 	print("%s %s" % [LOG_TAG, message])
 
 
-static func run_launch_on_ui_thread(host: Node, absolute_path: String, chooser_title: String, wallpaper: bool) -> void:
+static func run_launch_on_ui_thread(host: Node, absolute_path: String, chooser_title: String, wallpaper: bool, share_text: String = "") -> void:
 	if not is_android() or absolute_path.is_empty():
 		_finish_host(host, false, "invalid launch")
 		return
@@ -43,11 +45,11 @@ static func run_launch_on_ui_thread(host: Node, absolute_path: String, chooser_t
 		return
 	var activity: Object = get_activity(runtime)
 	if activity == null or not activity.has_method("runOnUiThread") or not runtime.has_method("createRunnableFromGodotCallable"):
-		var ok_direct := _launch_on_ui_thread(absolute_path, chooser_title, wallpaper)
+		var ok_direct := _launch_on_ui_thread(absolute_path, chooser_title, wallpaper, share_text)
 		_finish_host(host, ok_direct, last_error)
 		return
 	var ui_callable := func() -> void:
-		var ok_ui := _launch_on_ui_thread(absolute_path, chooser_title, wallpaper)
+		var ok_ui := _launch_on_ui_thread(absolute_path, chooser_title, wallpaper, share_text)
 		if host != null and is_instance_valid(host):
 			host.call_deferred("_on_gallery_android_result", ok_ui, last_error)
 	activity.runOnUiThread(runtime.createRunnableFromGodotCallable(ui_callable))
@@ -58,7 +60,7 @@ static func _finish_host(host: Node, ok: bool, error_text: String) -> void:
 		host.call_deferred("_on_gallery_android_result", ok, error_text)
 
 
-static func _launch_on_ui_thread(absolute_path: String, chooser_title: String, wallpaper: bool) -> bool:
+static func _launch_on_ui_thread(absolute_path: String, chooser_title: String, wallpaper: bool, share_text: String = "") -> bool:
 	clear_error()
 	var uri: Object = file_uri_for_path(absolute_path)
 	if uri == null:
@@ -73,13 +75,13 @@ static func _launch_on_ui_thread(absolute_path: String, chooser_title: String, w
 			mime = "image/jpeg"
 		elif lower.ends_with(".webp"):
 			mime = "image/webp"
-		intent = _build_share_intent(uri, mime)
+		intent = _build_share_intent(uri, mime, share_text)
 	if intent == null:
 		return false
 	return start_activity(intent, chooser_title)
 
 
-static func _build_share_intent(uri: Object, mime_type: String = "image/png") -> Object:
+static func _build_share_intent(uri: Object, mime_type: String = "image/png", share_text: String = "") -> Object:
 	var intent_cls: Object = wrap_intent_class()
 	if intent_cls == null:
 		report_error("Intent class missing")
@@ -91,8 +93,11 @@ static func _build_share_intent(uri: Object, mime_type: String = "image/png") ->
 	send_intent.setAction(ACTION_SEND)
 	send_intent.setType(mime_type if not mime_type.is_empty() else "image/*")
 	send_intent.putExtra(EXTRA_STREAM, uri)
+	if not share_text.is_empty():
+		send_intent.putExtra(EXTRA_SUBJECT, "Волшебный шар")
+		send_intent.putExtra(EXTRA_TEXT, share_text)
 	grant_uri_read(send_intent, uri)
-	log_info("share intent ready mime=%s" % mime_type)
+	log_info("share intent ready mime=%s text=%s" % [mime_type, "yes" if not share_text.is_empty() else "no"])
 	return send_intent
 
 
