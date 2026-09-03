@@ -1,0 +1,74 @@
+# Шпаргалка деплоя MagicalBall
+# Заливка на VPS — только руками (WinSCP + bash). Авто-ssh/scp не использовать.
+#
+# Каталог на VPS: /opt/magicalball/
+# API снаружи:    http://<IP_VPS>:<API_PORT>   ← порт из .env (default 17879)
+# Внутри контейнера всегда :8000 — в Godot его НЕ пиши, если API_PORT другой.
+# TrueTaro на том же хосте: /opt/truetaro  порт 17878 — не смешивать.
+# Полный гайд:    docs/vps-deploy.md
+
+══════════════════════════════════════════════════════════════
+## ПОРТЫ
+══════════════════════════════════════════════════════════════
+
+  Хост VPS     API_PORT  (default 17879)  ← сюда бьёт Godot + firewall
+  Контейнер    8000                       ← только docker-сеть
+  TrueTaro     17878                      ← чужой стек, не занимать
+
+  Проверка занятости:
+    ss -tlnp | grep -E ':17879|:17878|:19448|:8000|:18087|:18088' || true
+  Если 17879 занят → в .env: API_PORT=19448  и тот же порт в android_base_url
+
+══════════════════════════════════════════════════════════════
+## ПЕРВЫЙ ДЕПЛОЙ
+══════════════════════════════════════════════════════════════
+
+### На ПК
+  cd C:\epm-games\MagicalBall
+  .\deploy\prepare-winscp.ps1
+  → deploy\winscp-upload\
+
+### WinSCP → /opt/magicalball/
+  Залить СОДЕРЖИМОЕ deploy\winscp-upload\ в /opt/magicalball/
+  (чтобы появился /opt/magicalball/docker-compose.yml)
+  НЕ перезаписывай .env на сервере целиком после первого init.
+
+### На VPS
+  mkdir -p /opt/magicalball
+  cd /opt/magicalball
+  cp deploy/env.example .env
+  nano .env          # GIGACHAT_CREDENTIALS=...  API_PORT=17879
+  chmod +x deploy/*.sh
+  bash deploy/check-env.sh
+  # firewall: TCP API_PORT
+  bash deploy/install-on-vps.sh
+
+### Проверка (подставь API_PORT из .env)
+  curl -s http://127.0.0.1:17879/health
+  curl -s http://<IP_VPS>:17879/health
+  # {"status":"ok","service":"magicalball"}
+
+### Godot
+  Редактор:  "proxy_base_url": "http://127.0.0.1:17879"
+  APK:       "android_base_url": "http://147.45.173.26:17879"
+
+══════════════════════════════════════════════════════════════
+## ОБНОВИТЬ API / БЭКАП КЭША
+══════════════════════════════════════════════════════════════
+
+  ПК:     .\deploy\prepare-winscp.ps1
+  WinSCP: proxy/  (не трогать .env)
+  VPS:    bash deploy/reload-proxy-on-vps.sh
+          bash deploy/backup-cache-on-vps.sh
+
+  Только UI Godot → новая APK, VPS не нужен.
+
+══════════════════════════════════════════════════════════════
+## ЗАПРЕЩЕНО
+══════════════════════════════════════════════════════════════
+
+  docker compose down -v
+  docker volume prune
+  Путать 17878 (TrueTaro) и 17879 (этот стек)
+  Godot :8000 при API_PORT=17879
+  Ключ GigaChat в APK

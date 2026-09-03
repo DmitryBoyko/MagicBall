@@ -5,6 +5,10 @@ android/
 *.uid
 config/secrets.json
 proxy/.env
+.env
+deploy/winscp-upload/
+deploy/backups/*
+!deploy/backups/.gitignore
 proxy/data/semantic_cache.json
 proxy/__pycache__/
 proxy/.pytest_cache/

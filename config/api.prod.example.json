@@ -2,7 +2,7 @@
   "vortex_seconds": 4.0,
   "use_proxy": true,
   "proxy_base_url": "http://127.0.0.1:17879",
-  "android_base_url": "http://YOUR_VPS_IP:17879",
+  "android_base_url": "http://147.45.173.26:17879",
   "ai_http_timeout": 20.0,
   "semantic_threshold": 0.82,
   "other_apps_url": "https://www.rustore.ru/catalog/developer/9cf9ks"
