@@ -80,7 +80,13 @@ public sealed class AiGateway : IDisposable
             return cached;
         }
 
-        var raw = _bank.Synthesize(context.DeterministicProfile.UserName);
+        var snap = context.DynamicSnapshot;
+        var raw = _bank.Synthesize(
+            context.DeterministicProfile.UserName,
+            snap.WeatherState,
+            snap.EntropyWordAnchor,
+            snap.BallTintModifier,
+            snap.GeoLocationType);
         var extracted = SummaryExtractor.Extract(raw);
         return new OracleResult
         {
@@ -100,7 +106,8 @@ public sealed class AiGateway : IDisposable
         return string.Join('|',
             d.UserName, d.ZodiacSign, d.DestinyNumber,
             s.EntropyWordAnchor, s.PhotoMysticTag, s.TimeOfDay, s.BallMoodModifier,
-            s.BallTintModifier);
+            s.BallTintModifier, s.InquiryPulseAura,
+            s.GeoLocationType ?? "", s.WeatherState ?? "", s.DeviceBatteryAura ?? "");
     }
 
     public void Dispose()

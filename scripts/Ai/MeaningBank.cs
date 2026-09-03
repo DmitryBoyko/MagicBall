@@ -9,7 +9,12 @@ public sealed class MeaningBank
 
     public static IReadOnlyList<string> Records { get; } = BuildRecords();
 
-    public string Synthesize(string? name = null)
+    public string Synthesize(
+        string? name = null,
+        string? weather = null,
+        string? anchor = null,
+        string? tint = null,
+        string? place = null)
     {
         var count = _rng.Next(2, 4);
         var picked = Records.OrderBy(_ => _rng.Next()).Take(count);
@@ -18,6 +23,18 @@ public sealed class MeaningBank
             body = body.Replace("{name}", name.Trim());
         else
             body = body.Replace("{name}", "ты");
+
+        var hints = new List<string>();
+        if (!string.IsNullOrWhiteSpace(place))
+            hints.Add($"Место держит отпечаток: {place.Split('—')[0].Trim()}.");
+        if (!string.IsNullOrWhiteSpace(weather))
+            hints.Add($"Небо вторит состоянию: {weather.Trim()}.");
+        if (!string.IsNullOrWhiteSpace(anchor))
+            hints.Add($"Якорь дня — {anchor.Split('(')[0].Trim()}.");
+        if (!string.IsNullOrWhiteSpace(tint))
+            hints.Add($"Стекло шепчет: {tint.Split('—')[0].Trim()}.");
+        if (hints.Count > 0)
+            body = $"{body} {string.Join(" ", hints.Take(3))}";
 
         var gold = GoldPhrases[_rng.Next(GoldPhrases.Length)];
         return $"{body}\n[[ИТОГ]] {gold}";

@@ -31,3 +31,16 @@ def test_fingerprint_includes_inquiry_pulse() -> None:
     assert fingerprint(calm) != fingerprint(tense)
     dumped = tense.model_dump()["dynamic_snapshot"]
     assert dumped["inquiry_pulse_aura"].startswith("Тревожный")
+
+
+def test_fingerprint_includes_weather_and_geo() -> None:
+    a = OracleIn(dynamic_snapshot=DynamicSnapshot(weather_state="Ясно", geo_location_type="Казань"))
+    b = OracleIn(dynamic_snapshot=DynamicSnapshot(weather_state="Дождь", geo_location_type="Казань"))
+    assert fingerprint(a) != fingerprint(b)
+
+
+def test_synthesize_weaves_context_hints() -> None:
+    raw = synthesize("Анна", weather="Снегопад", anchor="Забытый Ключ", place="Томск — сибирский город")
+    assert "Снегопад" in raw
+    assert "Забытый Ключ" in raw
+    assert "Томск" in raw

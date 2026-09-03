@@ -54,8 +54,27 @@ GOLD = (
 RECORDS: tuple[str, ...] = tuple(f"{stem} {fold}" for stem in STEMS for fold in FOLDS)
 
 
-def synthesize(name: str | None = None) -> str:
+def synthesize(
+    name: str | None = None,
+    *,
+    weather: str | None = None,
+    anchor: str | None = None,
+    tint: str | None = None,
+    place: str | None = None,
+) -> str:
     who = (name or "").strip() or "ты"
     picked = random.sample(RECORDS, k=min(3, len(RECORDS)))
     body = " ".join(item.replace("{name}", who) for item in picked)
+    hints: list[str] = []
+    if place and place.strip():
+        hints.append(f"Место держит отпечаток: {place.strip().split('—')[0].strip()}.")
+    if weather and weather.strip():
+        hints.append(f"Небо вторит состоянию: {weather.strip()}.")
+    if anchor and anchor.strip():
+        short = anchor.strip().split("(")[0].strip()
+        hints.append(f"Якорь дня — {short}.")
+    if tint and tint.strip():
+        hints.append(f"Стекло шепчет: {tint.strip().split('—')[0].strip()}.")
+    if hints:
+        body = f"{body} {' '.join(hints[:3])}"
     return f"{body}\n[[ИТОГ]] {random.choice(GOLD)}"

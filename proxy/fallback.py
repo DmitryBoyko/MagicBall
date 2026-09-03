@@ -26,6 +26,9 @@ def fingerprint(body: OracleIn) -> str:
             snap.ball_mood_modifier,
             snap.ball_tint_modifier,
             snap.inquiry_pulse_aura,
+            snap.geo_location_type or "",
+            snap.weather_state or "",
+            snap.device_battery_aura or "",
         ]
     )
 
@@ -112,7 +115,14 @@ class SemanticCache:
 
 
 def synthesize_result(body: OracleIn, reason: str) -> OracleOut:
-    raw = synthesize(body.deterministic_profile.user_name)
+    snap = body.dynamic_snapshot
+    raw = synthesize(
+        body.deterministic_profile.user_name,
+        weather=snap.weather_state,
+        anchor=snap.entropy_word_anchor,
+        tint=snap.ball_tint_modifier,
+        place=snap.geo_location_type,
+    )
     interpretation, summary = extract_summary(raw)
     return OracleOut(
         interpretation=interpretation,
