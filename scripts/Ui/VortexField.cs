@@ -101,8 +101,15 @@ public partial class VortexField : CanvasLayer
     {
         var holdSec = Mathf.Max(0.5f, AppConfig.Current.VortexSeconds);
         Begin();
-        await Task.WhenAll(Safe(holdUntil), WaitElapsed(holdSec, cancellationToken));
-        await WindDownAsync(AppConfig.VortexFadeSeconds, cancellationToken);
+        try
+        {
+            await Task.WhenAll(Safe(holdUntil), WaitElapsed(holdSec, cancellationToken));
+            await WindDownAsync(AppConfig.VortexFadeSeconds, cancellationToken);
+        }
+        finally
+        {
+            GetNodeOrNull<AudioService>("/root/AudioService")?.StopVortexMix(0.4f);
+        }
     }
 
     public override void _Process(double delta)
@@ -216,6 +223,7 @@ public partial class VortexField : CanvasLayer
         SetProcess(true);
         StartEmbers();
         WriteMesh();
+        GetNodeOrNull<AudioService>("/root/AudioService")?.StartVortexMix();
     }
 
     private async Task WindDownAsync(float duration, CancellationToken cancellationToken)
@@ -225,6 +233,7 @@ public partial class VortexField : CanvasLayer
         _windingDown = true;
         _windT = 0f;
         _windDur = Mathf.Max(duration, 0.35f);
+        GetNodeOrNull<AudioService>("/root/AudioService")?.StopVortexMix(_windDur);
         _windDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var reg = cancellationToken.Register(() =>
         {

@@ -23,7 +23,6 @@ public partial class MainScene : Control
     private BackgroundWarp _warp = null!;
     private MarginContainer _uiPad = null!;
     private Button _ask = null!;
-    private Button _openReading = null!;
     private Button _otherApps = null!;
     private SettingsGearButton _gear = null!;
     private ProfileModal _modal = null!;
@@ -32,7 +31,14 @@ public partial class MainScene : Control
     private ContextManager _context = null!;
     private readonly BackgroundController _backgrounds = new();
     private OracleResult? _lastResult;
-    private bool _oracleBusy;
+    private OracleStep _step = OracleStep.Ask;
+
+    private enum OracleStep
+    {
+        Ask,
+        Busy,
+        Answer,
+    }
     private Tween? _introTween;
     private bool _introStarted;
     private bool _introFinished;
@@ -125,17 +131,8 @@ public partial class MainScene : Control
         _ask = UiTheme.MakeButton("Спросить", 24);
         _ask.CustomMinimumSize = new Vector2(0, 64);
         _ask.Disabled = true;
-        _ask.Pressed += OnAskPressed;
+        _ask.Pressed += OnActionPressed;
         bottom.AddChild(_ask);
-
-        _openReading = UiTheme.MakeButton("Открыть толкование", 22);
-        _openReading.Visible = false;
-        _openReading.Pressed += () =>
-        {
-            if (_lastResult != null)
-                _sheet.Present(_lastResult);
-        };
-        bottom.AddChild(_openReading);
 
         var footer = new HBoxContainer();
         footer.AddThemeConstantOverride("separation", 12);
@@ -164,6 +161,7 @@ public partial class MainScene : Control
         _ads = new AdOverlay();
         AddChild(_ads);
         _sheet = new InterpretationSheet();
+        _sheet.Closed += OnReadingClosed;
         AddChild(_sheet);
     }
 
@@ -249,14 +247,17 @@ public partial class MainScene : Control
         if (_introFinished)
             return;
         _introFinished = true;
-        RefreshAskEnabled();
+        RefreshActionButton();
     }
 
-    private void RefreshAskEnabled()
+    private void RefreshActionButton()
     {
         if (_ask == null)
             return;
-        _ask.Disabled = !_introFinished || _oracleBusy;
+
+        _ask.Text = _step == OracleStep.Answer ? "Ответ" : "Спросить";
+        _ask.Visible = _introFinished && _step != OracleStep.Busy;
+        _ask.Disabled = !_introFinished || _step == OracleStep.Busy;
     }
 
     private void PlaceBallCluster(Vector2 ballPos)
@@ -324,10 +325,17 @@ public partial class MainScene : Control
         return string.IsNullOrWhiteSpace(shader.Code) ? null : shader;
     }
 
-    private async void OnAskPressed()
+    private async void OnActionPressed()
     {
-        if (!_introFinished)
+        if (!_introFinished || _step == OracleStep.Busy)
             return;
+
+        if (_step == OracleStep.Answer)
+        {
+            if (_lastResult != null)
+                _sheet.Present(_lastResult);
+            return;
+        }
 
         if (ProfileStore.Current is not { IsComplete: true } profile)
         {
@@ -335,9 +343,8 @@ public partial class MainScene : Control
             return;
         }
 
-        _oracleBusy = true;
-        RefreshAskEnabled();
-        _openReading.Visible = false;
+        _step = OracleStep.Busy;
+        RefreshActionButton();
         _lastResult = null;
 
         var request = RunOracleAsync(profile);
@@ -360,9 +367,14 @@ public partial class MainScene : Control
             };
         }
 
-        _oracleBusy = false;
-        RefreshAskEnabled();
-        _openReading.Visible = true;
+        _step = OracleStep.Answer;
+        RefreshActionButton();
+    }
+
+    private void OnReadingClosed()
+    {
+        _step = OracleStep.Ask;
+        RefreshActionButton();
     }
 
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)

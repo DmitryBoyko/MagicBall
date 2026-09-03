@@ -7,6 +7,13 @@ _MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 _LEAD_PUNCT_RE = re.compile(r"^[\s:;—–\-]+")
+_TRAIL_BRACKETS_RE = re.compile(r"\[\[\s*([^\[\]]+?)\s*\]\]\s*$")
+_DOUBLE_BRACKETS_RE = re.compile(r"\[\[\s*(.*?)\s*\]\]", re.DOTALL)
+_SINGLE_BRACKETS_RE = re.compile(r"\[([^\[\]\n]{1,80})\]")
+_VISIBLE_RE = re.compile(
+    r"[^\w\s.,!?:;…\-—–()«»\"'“”‘’‚„]",
+    re.UNICODE,
+)
 
 
 def strip_markup(text: str) -> str:
@@ -17,9 +24,18 @@ def strip_markup(text: str) -> str:
     cleaned = cleaned.replace("```", "")
     cleaned = re.sub(r"`+", "", cleaned)
     cleaned = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s{0,3}>\s?", "", cleaned)
+    cleaned = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = _unwrap_brackets(cleaned)
     cleaned = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", cleaned)
     cleaned = re.sub(r"_{1,3}([^_]+)_{1,3}", r"\1", cleaned)
+    cleaned = re.sub(r"[*_`#~|\\]+", "", cleaned)
     cleaned = re.sub(r"(?m)^\s*(?:[-+•]|\d+[.)])\s+", "", cleaned)
+    cleaned = _VISIBLE_RE.sub("", cleaned)
+    cleaned = cleaned.replace("_", "")
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r" {2,}", " ", cleaned)
     return cleaned.strip()
 
@@ -30,7 +46,14 @@ def extract_summary(text: str) -> tuple[str, str]:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     matches = list(_MARKER_RE.finditer(normalized))
     if not matches:
+        stripped = normalized.strip()
+        trail = _TRAIL_BRACKETS_RE.search(stripped)
+        if trail:
+            inner = trail.group(1).strip()
+            if 0 < len(inner) <= 80:
+                return strip_markup(stripped[: trail.start()]), strip_markup(inner)
         return strip_markup(normalized), ""
+
     match = matches[-1]
     before = normalized[: match.start()]
     after = _LEAD_PUNCT_RE.sub("", normalized[match.end() :])
@@ -55,3 +78,12 @@ def extract_summary(text: str) -> tuple[str, str]:
     if len(summary) > 300:
         summary = summary[:300].strip()
     return strip_markup(body), summary
+
+
+def _unwrap_brackets(text: str) -> str:
+    prev = None
+    cleaned = text
+    while prev != cleaned:
+        prev = cleaned
+        cleaned = _DOUBLE_BRACKETS_RE.sub(r"\1", cleaned)
+    return _SINGLE_BRACKETS_RE.sub(r"\1", cleaned)

@@ -42,7 +42,16 @@ public sealed class OracleProxyClient : IDisposable
         {
             PropertyNameCaseInsensitive = true,
         });
-        return parsed ?? throw new HttpRequestException("proxy returned empty body");
+        if (parsed == null)
+            throw new HttpRequestException("proxy returned empty body");
+
+        var joined = string.IsNullOrWhiteSpace(parsed.Summary)
+            ? parsed.Interpretation
+            : $"{parsed.Interpretation}\n[[ИТОГ]] {parsed.Summary}";
+        var extracted = SummaryExtractor.Extract(joined);
+        parsed.Interpretation = extracted.Interpretation;
+        parsed.Summary = extracted.Summary;
+        return parsed;
     }
 
     private string ResolveBaseUrl()

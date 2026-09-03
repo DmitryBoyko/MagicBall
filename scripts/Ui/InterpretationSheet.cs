@@ -5,6 +5,8 @@ namespace CrystalBall.Ui;
 
 public partial class InterpretationSheet : CanvasLayer
 {
+    public event Action? Closed;
+
     private Label _body = null!;
     private Label _summary = null!;
     private MarginContainer _margin = null!;
@@ -16,7 +18,7 @@ public partial class InterpretationSheet : CanvasLayer
 
         var dim = new ColorRect { Color = UiTheme.ModalDim };
         dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        dim.GuiInput += _ => Hide();
+        dim.GuiInput += OnDimInput;
         AddChild(dim);
 
         _margin = new MarginContainer();
@@ -37,7 +39,7 @@ public partial class InterpretationSheet : CanvasLayer
         box.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         pad.AddChild(box);
 
-        box.AddChild(UiTheme.MakeLabel("Толкование шара", UiTheme.FontReadingTitle, UiTheme.Gold));
+        box.AddChild(UiTheme.MakeLabel("Ответ", UiTheme.FontReadingTitle, UiTheme.Gold));
 
         var scroll = new ScrollContainer
         {
@@ -60,7 +62,7 @@ public partial class InterpretationSheet : CanvasLayer
 
         var close = UiTheme.MakeButton("Закрыть", UiTheme.FontReadingButton);
         close.CustomMinimumSize = new Vector2(0, 88);
-        close.Pressed += Hide;
+        close.Pressed += Dismiss;
         box.AddChild(close);
 
         CyberFrameBorder.SetupModal(panel);
@@ -76,8 +78,34 @@ public partial class InterpretationSheet : CanvasLayer
     public void Present(OracleResult result)
     {
         ApplySafeArea();
-        _body.Text = result.Interpretation;
-        _summary.Text = string.IsNullOrWhiteSpace(result.Summary) ? string.Empty : result.Summary;
+        _body.Text = SummaryExtractor.StripMarkup(result.Interpretation);
+        var gold = SummaryExtractor.StripMarkup(result.Summary);
+        _summary.Text = gold;
         Visible = true;
+    }
+
+    private void Dismiss()
+    {
+        if (!Visible)
+            return;
+        Visible = false;
+        Closed?.Invoke();
+    }
+
+    private void OnDimInput(InputEvent @event)
+    {
+        if (@event is InputEventScreenTouch touch && touch.Pressed)
+        {
+            Dismiss();
+            return;
+        }
+
+        if (@event is InputEventMouseButton mouse
+            && mouse.Pressed
+            && mouse.ButtonIndex == MouseButton.Left
+            && !DisplayServer.IsTouchscreenAvailable())
+        {
+            Dismiss();
+        }
     }
 }

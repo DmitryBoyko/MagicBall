@@ -7,6 +7,7 @@ namespace CrystalBall.Ui;
 public partial class ProfileModal : CanvasLayer
 {
     private const int MinBirthYear = 1930;
+    private const int RecentYearsToSkip = 6;
 
     private static readonly string[] MonthsShort =
         ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
@@ -218,7 +219,7 @@ public partial class ProfileModal : CanvasLayer
             return;
         }
 
-        if (birth > DateTime.Today || birth < new DateTime(MinBirthYear, 1, 1))
+        if (birth.Year > MaxBirthYear() || birth < new DateTime(MinBirthYear, 1, 1))
             return;
 
         var profile = new UserProfile
@@ -271,7 +272,7 @@ public partial class ProfileModal : CanvasLayer
     private void OpenMonthPicker()
     {
         _picking = DatePart.Month;
-        var maxMonth = _birthYear == DateTime.Today.Year ? DateTime.Today.Month : 12;
+        const int maxMonth = 12;
         var items = new List<TilePickItem>(maxMonth);
         for (var m = 1; m <= maxMonth; m++)
             items.Add(new TilePickItem(m, MonthsShort[m - 1]));
@@ -281,7 +282,7 @@ public partial class ProfileModal : CanvasLayer
     private void OpenYearPicker()
     {
         _picking = DatePart.Year;
-        var maxYear = DateTime.Today.Year;
+        var maxYear = MaxBirthYear();
         var items = new List<TilePickItem>(maxYear - MinBirthYear + 1);
         for (var y = maxYear; y >= MinBirthYear; y--)
             items.Add(new TilePickItem(y, y.ToString()));
@@ -310,20 +311,14 @@ public partial class ProfileModal : CanvasLayer
 
     private void ClampBirthDate()
     {
-        _birthYear = Mathf.Clamp(_birthYear, MinBirthYear, DateTime.Today.Year);
+        _birthYear = Mathf.Clamp(_birthYear, MinBirthYear, MaxBirthYear());
         _birthMonth = Mathf.Clamp(_birthMonth, 1, 12);
-        if (_birthYear == DateTime.Today.Year)
-            _birthMonth = Mathf.Min(_birthMonth, DateTime.Today.Month);
         _birthDay = Mathf.Clamp(_birthDay, 1, MaxDayFor(_birthYear, _birthMonth));
     }
 
-    private static int MaxDayFor(int year, int month)
-    {
-        var max = DateTime.DaysInMonth(year, month);
-        if (year == DateTime.Today.Year && month == DateTime.Today.Month)
-            max = Mathf.Min(max, DateTime.Today.Day);
-        return max;
-    }
+    private static int MaxBirthYear() => DateTime.Today.Year - RecentYearsToSkip;
+
+    private static int MaxDayFor(int year, int month) => DateTime.DaysInMonth(year, month);
 
     private void RefreshDateButtons()
     {
