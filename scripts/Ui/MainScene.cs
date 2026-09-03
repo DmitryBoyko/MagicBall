@@ -53,6 +53,10 @@ public partial class MainScene : Control
     private const float IdleBobRefHeight = 140f;
     private float _idleTime;
     private float _idlePhase;
+    private const float BallIdleOpacity = 0.42f;
+    private const float BallAskOpacity = 0.28f;
+    private const float BallIdleLift = 0.10f;
+    private const float BallAskLift = 0.38f;
 
     public override void _Ready()
     {
@@ -180,6 +184,7 @@ public partial class MainScene : Control
         AddChild(_ads);
         _sheet = new InterpretationSheet();
         _sheet.Closed += OnReadingClosed;
+        _sheet.CaptureChrome += OnShareCaptureChrome;
         AddChild(_sheet);
     }
 
@@ -342,6 +347,8 @@ public partial class MainScene : Control
         material.SetShaderParameter("tumble", rng.RandfRange(0.18f, 0.55f));
         material.SetShaderParameter("light_drift", rng.RandfRange(0.22f, 0.55f));
         material.SetShaderParameter("glass_reflection", rng.RandfRange(0.42f, 0.68f));
+        material.SetShaderParameter("opacity", BallIdleOpacity);
+        material.SetShaderParameter("lift", BallIdleLift);
         var palette = BallPaletteCatalog.Pick(rng);
         material.SetShaderParameter("fog_color_1", palette.FogA);
         material.SetShaderParameter("fog_color_2", palette.FogB);
@@ -385,7 +392,7 @@ public partial class MainScene : Control
         RefreshActionButton();
         _lastResult = null;
         SetSunActive(false);
-        SetBallLit(true);
+        SetBallLook(BallLook.Asking);
         _sparks.SetAsking(true);
 
         var request = RunOracleAsync(profile);
@@ -427,7 +434,7 @@ public partial class MainScene : Control
             return;
         }
 
-        SetBallLit(true);
+        SetBallLook(BallLook.Idle);
         SetSunActive(true);
         _step = OracleStep.Answer;
         RefreshActionButton();
@@ -436,7 +443,7 @@ public partial class MainScene : Control
     private void ShowFog()
     {
         SetSunActive(false);
-        SetBallLit(false);
+        SetBallLook(BallLook.Fog);
         _sparks.SetAsking(false);
         _step = OracleStep.Ask;
         RefreshActionButton();
@@ -445,23 +452,67 @@ public partial class MainScene : Control
 
     private void SetSunActive(bool on) => _sun?.SetActive(on);
 
-    private void SetBallLit(bool lit)
+    private enum BallLook
     {
-        var ball = lit ? Colors.White : new Color(0.40f, 0.38f, 0.50f, 1f);
-        var sparks = lit ? Colors.White : new Color(0.32f, 0.34f, 0.48f, 0.45f);
+        Idle,
+        Asking,
+        Fog,
+    }
+
+    private void SetBallLook(BallLook look)
+    {
+        float opacity;
+        float lift;
+        Color ball;
+        Color sparks;
+        switch (look)
+        {
+            case BallLook.Asking:
+                opacity = BallAskOpacity;
+                lift = BallAskLift;
+                ball = Colors.White;
+                sparks = Colors.White;
+                break;
+            case BallLook.Fog:
+                opacity = BallIdleOpacity;
+                lift = 0f;
+                ball = new Color(0.40f, 0.38f, 0.50f, 1f);
+                sparks = new Color(0.32f, 0.34f, 0.48f, 0.45f);
+                break;
+            default:
+                opacity = BallIdleOpacity;
+                lift = BallIdleLift;
+                ball = Colors.White;
+                sparks = Colors.White;
+                break;
+        }
+
         var tween = CreateTween();
         tween.SetParallel(true);
         tween.TweenProperty(_ball, "modulate", ball, 0.45);
         tween.TweenProperty(_sparks, "modulate", sparks, 0.45);
+        if (_ball.Material is ShaderMaterial mat)
+        {
+            tween.TweenProperty(mat, "shader_parameter/opacity", opacity, 0.45);
+            tween.TweenProperty(mat, "shader_parameter/lift", lift, 0.45);
+        }
     }
 
     private void OnReadingClosed()
     {
         SetSunActive(false);
-        SetBallLit(true);
+        SetBallLook(BallLook.Idle);
         _sparks.SetAsking(false);
         _step = OracleStep.Ask;
         RefreshActionButton();
+    }
+
+    private void OnShareCaptureChrome(bool capturing)
+    {
+        if (_uiPad != null)
+            _uiPad.Visible = !capturing;
+        if (!capturing)
+            RefreshActionButton();
     }
 
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)

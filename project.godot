@@ -42,7 +42,7 @@ project/assembly_name="MagicBall"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/GodotAndroidYandexAds/plugin.cfg")
+enabled=PackedStringArray("res://addons/GodotAndroidYandexAds/plugin.cfg", "res://addons/android_share_queries/plugin.cfg")
 
 [input_devices]
 

@@ -1,4 +1,5 @@
 using CrystalBall.Ai;
+using CrystalBall.Share;
 using Godot;
 
 namespace CrystalBall.Ui;
@@ -6,6 +7,7 @@ namespace CrystalBall.Ui;
 public partial class InterpretationSheet : CanvasLayer
 {
     public event Action? Closed;
+    public event Action<bool>? CaptureChrome;
 
     private const float PanelWidthFrac = 0.92f;
     private const float PanelHeightFrac = 0.5f;
@@ -13,9 +15,13 @@ public partial class InterpretationSheet : CanvasLayer
 
     private Label _body = null!;
     private Label _summary = null!;
+    private Label _shareHint = null!;
     private MarginContainer _margin = null!;
     private PanelContainer _panel = null!;
     private ScrollContainer _scroll = null!;
+    private Button _share = null!;
+    private Button _close = null!;
+    private bool _sharing;
 
     public override void _Ready()
     {
@@ -70,10 +76,29 @@ public partial class InterpretationSheet : CanvasLayer
         _summary.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         text.AddChild(_summary);
 
-        var close = UiTheme.MakeButton("Закрыть", UiTheme.FontReadingButton);
-        close.CustomMinimumSize = new Vector2(0, 64);
-        close.Pressed += Dismiss;
-        box.AddChild(close);
+        _shareHint = UiTheme.MakeLabel("", UiTheme.FontModalCaption, UiTheme.Cream);
+        _shareHint.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+        box.AddChild(_shareHint);
+
+        var buttons = new HBoxContainer
+        {
+            Alignment = BoxContainer.AlignmentMode.Center,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkEnd,
+        };
+        buttons.AddThemeConstantOverride("separation", 16);
+        box.AddChild(buttons);
+
+        _share = UiTheme.MakeButton("Поделиться", UiTheme.FontReadingButton);
+        _share.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _share.CustomMinimumSize = new Vector2(0, 64);
+        _share.Pressed += OnSharePressed;
+        buttons.AddChild(_share);
+
+        _close = UiTheme.MakeButton("Закрыть", UiTheme.FontReadingButton);
+        _close.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _close.CustomMinimumSize = new Vector2(0, 64);
+        _close.Pressed += Dismiss;
+        buttons.AddChild(_close);
 
         CyberFrameBorder.SetupModal(_panel, PanelBgAlpha);
         ApplySafeArea();
@@ -96,6 +121,10 @@ public partial class InterpretationSheet : CanvasLayer
         _body.Text = SummaryExtractor.StripMarkup(result.Interpretation);
         _summary.Text = SummaryExtractor.StripMarkup(result.Summary);
         _scroll.ScrollVertical = 0;
+        _shareHint.Text = "";
+        _sharing = false;
+        SetShareBusy(false);
+        _share.Visible = true;
         Visible = true;
     }
 
@@ -105,12 +134,84 @@ public partial class InterpretationSheet : CanvasLayer
         _body.Text = "Туман судьбы неразличим.";
         _summary.Text = string.Empty;
         _scroll.ScrollVertical = 0;
+        _shareHint.Text = "";
+        _sharing = false;
+        SetShareBusy(false);
+        _share.Visible = false;
         Visible = true;
+    }
+
+    private async void OnSharePressed()
+    {
+        if (_sharing || !Visible)
+            return;
+
+        _sharing = true;
+        SetShareBusy(true);
+        _shareHint.Text = "Готовим изображение…";
+
+        CaptureChrome?.Invoke(true);
+        Visible = false;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+
+        var shot = GetViewport()?.GetTexture()?.GetImage();
+        Visible = true;
+        CaptureChrome?.Invoke(false);
+
+        if (shot == null || shot.IsEmpty())
+        {
+            FinishShare("", "Не удалось сохранить.");
+            return;
+        }
+
+        var path = await ReadingShareExport.ExportAsync(this, shot, _body.Text, _summary.Text);
+        if (string.IsNullOrEmpty(path))
+        {
+            FinishShare("", "Не удалось сохранить.");
+            return;
+        }
+
+        if (OS.GetName() == "Android" || OS.HasFeature("Android"))
+        {
+            GalleryShare.Launch(this, path, "Поделиться предсказанием");
+            return;
+        }
+
+        _shareHint.Text = path;
+        if (OS.GetName() is "Windows" or "Linux" or "macOS")
+            OS.ShellOpen(path.GetBaseDir());
+        FinishShare(path, "");
+    }
+
+    public void _on_gallery_android_result(bool ok, string errorText)
+    {
+        if (ok)
+            FinishShare("ok", "");
+        else
+            FinishShare("", string.IsNullOrEmpty(errorText) ? "Не удалось поделиться." : errorText);
+    }
+
+    private void FinishShare(string path, string error)
+    {
+        _sharing = false;
+        SetShareBusy(false);
+        if (!string.IsNullOrEmpty(error))
+            _shareHint.Text = error;
+        else if (string.IsNullOrEmpty(path) || path == "ok")
+            _shareHint.Text = "";
+    }
+
+    private void SetShareBusy(bool busy)
+    {
+        _share.Disabled = busy;
+        _close.Disabled = busy;
     }
 
     private void Dismiss()
     {
-        if (!Visible)
+        if (!Visible || _sharing)
             return;
         Visible = false;
         Closed?.Invoke();
@@ -118,6 +219,9 @@ public partial class InterpretationSheet : CanvasLayer
 
     private void OnDimInput(InputEvent @event)
     {
+        if (_sharing)
+            return;
+
         if (@event is InputEventScreenTouch touch && touch.Pressed)
         {
             Dismiss();

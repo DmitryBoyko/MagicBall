@@ -6,7 +6,8 @@ uniform vec4 fog_color_2 : source_color = vec4(0.62, 0.12, 0.95, 1.0);
 uniform float fog_speed : hint_range(0.0, 5.0) = 0.55;
 uniform float fog_density : hint_range(1.0, 10.0) = 3.2;
 uniform float glass_reflection : hint_range(0.0, 1.0) = 0.55;
-uniform float opacity : hint_range(0.0, 1.0) = 0.58;
+uniform float opacity : hint_range(0.0, 1.0) = 0.42;
+uniform float lift : hint_range(0.0, 1.0) = 0.10;
 uniform float session_seed : hint_range(0.0, 99.0) = 1.0;
 uniform float spin_sign : hint_range(-1.0, 1.0) = 1.0;
 uniform float tumble : hint_range(0.0, 1.0) = 0.35;
@@ -67,9 +68,9 @@ void fragment() {
 	fog += vec3(0.35, 0.55, 1.0) * n2 * 0.35;
 	float fog_a = clamp(n1 * 0.72 + n2 * 0.28, 0.0, 1.0) * smoothstep(1.0, 0.18, r);
 
-	vec3 glass = vec3(0.07, 0.05, 0.16);
-	glass = mix(glass, fog, fog_a * 0.92);
-	glass += mix(fog_color_1.rgb, fog_color_2.rgb, 0.45) * (1.0 - r) * 0.18;
+	vec3 glass = vec3(0.16, 0.14, 0.26);
+	glass = mix(glass, fog, fog_a * 0.82);
+	glass += mix(fog_color_1.rgb, fog_color_2.rgb, 0.45) * (1.0 - r) * 0.22;
 
 	float fresnel = pow(1.0 - z, 2.4) * glass_reflection;
 	glass += fog_color_1.rgb * fresnel;
@@ -89,8 +90,10 @@ void fragment() {
 	float spec = pow(max(dot(n, light1), 0.0), 40.0);
 	float spec2 = pow(max(dot(n, light2), 0.0), 14.0) * 0.28;
 	float bloom = pow(max(dot(n, light1), 0.0), 8.0) * 0.12;
-	glass += vec3(1.0) * spec * 0.62 + mix(fog_color_1.rgb, vec3(1.0), 0.55) * spec2 + fog_color_2.rgb * bloom;
+	glass += vec3(1.0) * spec * 0.68 + mix(fog_color_1.rgb, vec3(1.0), 0.55) * spec2 + fog_color_2.rgb * bloom;
+	glass = mix(glass, glass * 1.22 + vec3(0.20, 0.22, 0.28), lift);
 
-	float alpha = sphere * (opacity + fog_a * 0.18 + fresnel * 0.22);
-	COLOR = vec4(glass, clamp(alpha, 0.0, 0.82));
+	float alpha = sphere * (opacity + fog_a * 0.12 + fresnel * 0.16);
+	float a_max = mix(0.68, 0.50, lift);
+	COLOR = vec4(glass, clamp(alpha, 0.0, a_max));
 }
