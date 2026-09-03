@@ -24,6 +24,7 @@ public static class UiTheme
     public const int FontReadingBody = 32;
     public const int FontReadingSummary = 34;
     public const int FontReadingButton = 28;
+    public const int FontAskHint = 16;
 
     public static Label MakeLabel(string text, int size, Color color, HorizontalAlignment align = HorizontalAlignment.Center)
     {

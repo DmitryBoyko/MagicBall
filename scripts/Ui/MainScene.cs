@@ -24,6 +24,7 @@ public partial class MainScene : Control
     private BackgroundWarp _warp = null!;
     private MarginContainer _uiPad = null!;
     private Button _ask = null!;
+    private Label _askHint = null!;
     private Button _otherApps = null!;
     private SettingsGearButton _gear = null!;
     private ProfileModal _modal = null!;
@@ -156,11 +157,25 @@ public partial class MainScene : Control
 
         bottom.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
 
+        _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.78f));
+        _askHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _askHint.MouseFilter = MouseFilterEnum.Ignore;
+        _askHint.MaxLines = 2;
+        _askHint.Visible = false;
+        var hintRng = new RandomNumberGenerator();
+        hintRng.Randomize();
+        _askHint.Text = AskFocusCatalog.Pick(hintRng);
+
         _ask = UiTheme.MakeButton("Спросить", 24);
         _ask.CustomMinimumSize = new Vector2(0, 64);
         _ask.Disabled = true;
         _ask.Pressed += OnActionPressed;
-        bottom.AddChild(_ask);
+
+        var askBlock = new VBoxContainer();
+        askBlock.AddThemeConstantOverride("separation", 8);
+        askBlock.AddChild(_askHint);
+        askBlock.AddChild(_ask);
+        bottom.AddChild(askBlock);
 
         var footer = new HBoxContainer();
         footer.AddThemeConstantOverride("separation", 12);
@@ -306,6 +321,8 @@ public partial class MainScene : Control
         var sheetOpen = _sheet is { Visible: true } || _casting is { Visible: true };
         _ask.Visible = _introFinished && !sheetOpen;
         _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling || sheetOpen;
+        if (_askHint != null)
+            _askHint.Visible = _ask.Visible && _step == OracleStep.Ask;
         CacheAskBottom();
     }
 
@@ -581,14 +598,19 @@ public partial class MainScene : Control
         _askSettling = true;
         _askSettleTween?.Kill();
         RefreshActionButton();
+        var faded = new Color(1f, 1f, 1f, 0.32f);
         if (_ask != null)
-            _ask.Modulate = new Color(1f, 1f, 1f, 0.32f);
+            _ask.Modulate = faded;
+        if (_askHint != null)
+            _askHint.Modulate = faded;
 
         _askSettleTween = CreateTween();
         _askSettleTween.SetEase(Tween.EaseType.Out);
         _askSettleTween.SetTrans(Tween.TransitionType.Sine);
         if (_ask != null)
             _askSettleTween.TweenProperty(_ask, "modulate", Colors.White, SunFadeSeconds);
+        if (_askHint != null)
+            _askSettleTween.TweenProperty(_askHint, "modulate", Colors.White, SunFadeSeconds);
 
         _sun?.FadeOut(SunFadeSeconds, OnSunFadeFinished);
     }
@@ -600,6 +622,8 @@ public partial class MainScene : Control
         _askSettling = false;
         if (_ask != null)
             _ask.Modulate = Colors.White;
+        if (_askHint != null)
+            _askHint.Modulate = Colors.White;
         RefreshActionButton();
     }
 
