@@ -23,6 +23,7 @@ def fingerprint(body: OracleIn) -> str:
             snap.photo_mystic_tag,
             snap.time_of_day,
             snap.ball_mood_modifier,
+            snap.ball_tint_modifier,
         ]
     )
 

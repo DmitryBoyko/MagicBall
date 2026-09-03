@@ -18,6 +18,7 @@ public partial class MainScene : Control
 
     private TextureRect _background = null!;
     private TextureRect _ball = null!;
+    private SunSparks _sun = null!;
     private BallSparks _sparks = null!;
     private VortexField _vortex = null!;
     private BackgroundWarp _warp = null!;
@@ -90,6 +91,9 @@ public partial class MainScene : Control
 
         _warp = new BackgroundWarp();
         AddChild(_warp);
+
+        _sun = new SunSparks { MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+        AddChild(_sun);
 
         _ball = new TextureRect
         {
@@ -183,6 +187,8 @@ public partial class MainScene : Control
         _sparkPad = ballSize * 0.18f;
         _sparks.Size = new Vector2(ballSize + _sparkPad * 2f, ballSize + _sparkPad * 2f);
         _sparks.SetBallRadius(ballSize * 0.5f);
+        var sunPad = ballSize * 0.22f;
+        _sun.Size = new Vector2(ballSize + sunPad * 2f, ballSize + sunPad * 2f);
         _vortex.SyncSize(GetViewportRect().Size);
         _warp?.SetEnabled(WarpBackgroundBehindBall);
 
@@ -239,6 +245,7 @@ public partial class MainScene : Control
         _introTween.SetTrans(Tween.TransitionType.Cubic);
         _introTween.TweenProperty(_ball, "position", _ballTarget, seconds);
         _introTween.TweenProperty(_sparks, "position", SparkPosFor(_ballTarget), seconds);
+        _introTween.TweenProperty(_sun, "position", _ballTarget - _ball.Size * 0.22f, seconds);
         _introTween.Finished += OnIntroFinished;
     }
 
@@ -247,6 +254,7 @@ public partial class MainScene : Control
         if (_introFinished)
             return;
         _introFinished = true;
+        PlaceBallCluster(_ballTarget);
         RefreshActionButton();
     }
 
@@ -264,6 +272,8 @@ public partial class MainScene : Control
     {
         _ball.Position = ballPos;
         _sparks.Position = SparkPosFor(ballPos);
+        var sunPad = _ball.Size * 0.22f;
+        _sun.Position = ballPos - sunPad;
     }
 
     private Vector2 SparkPosFor(Vector2 ballPos) => ballPos - new Vector2(_sparkPad, _sparkPad);
@@ -308,6 +318,7 @@ public partial class MainScene : Control
         var palette = BallPaletteCatalog.Pick(rng);
         material.SetShaderParameter("fog_color_1", palette.FogA);
         material.SetShaderParameter("fog_color_2", palette.FogB);
+        SessionBallTint.Set(palette.Name, palette.Meaning);
         _sparks?.Configure(spinSign, fogSpeed, palette.FogA, palette.FogB);
     }
 
@@ -346,6 +357,8 @@ public partial class MainScene : Control
         _step = OracleStep.Busy;
         RefreshActionButton();
         _lastResult = null;
+        SetSunActive(false);
+        SetBallLit(true);
 
         var request = RunOracleAsync(profile);
         try
@@ -358,8 +371,8 @@ public partial class MainScene : Control
             GD.PushWarning($"[MainScene] {ex.Message}");
             _lastResult = new OracleResult
             {
-                Interpretation = "Шар замер в тумане. Повтори вопрос чуть позже.",
-                Summary = "Тишина тоже ответ.",
+                Interpretation = string.Empty,
+                Summary = string.Empty,
                 OsirisPresent = false,
                 Source = "synthesized",
                 FallbackUsed = true,
@@ -367,12 +380,43 @@ public partial class MainScene : Control
             };
         }
 
-        _step = OracleStep.Answer;
+        ApplyOracleOutcome(_lastResult);
+    }
+
+    private void ApplyOracleOutcome(OracleResult? result)
+    {
+        if (result is { HasLlmAnswer: true })
+        {
+            SetBallLit(true);
+            SetSunActive(true);
+            _step = OracleStep.Answer;
+            RefreshActionButton();
+            return;
+        }
+
+        SetSunActive(false);
+        SetBallLit(false);
+        _step = OracleStep.Ask;
         RefreshActionButton();
+        _sheet.PresentFog();
+    }
+
+    private void SetSunActive(bool on) => _sun?.SetActive(on);
+
+    private void SetBallLit(bool lit)
+    {
+        var ball = lit ? Colors.White : new Color(0.40f, 0.38f, 0.50f, 1f);
+        var sparks = lit ? Colors.White : new Color(0.32f, 0.34f, 0.48f, 0.45f);
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(_ball, "modulate", ball, 0.45);
+        tween.TweenProperty(_sparks, "modulate", sparks, 0.45);
     }
 
     private void OnReadingClosed()
     {
+        SetSunActive(false);
+        SetBallLit(true);
         _step = OracleStep.Ask;
         RefreshActionButton();
     }

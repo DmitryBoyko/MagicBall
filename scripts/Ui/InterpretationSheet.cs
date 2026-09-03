@@ -79,8 +79,15 @@ public partial class InterpretationSheet : CanvasLayer
     {
         ApplySafeArea();
         _body.Text = SummaryExtractor.StripMarkup(result.Interpretation);
-        var gold = SummaryExtractor.StripMarkup(result.Summary);
-        _summary.Text = gold;
+        _summary.Text = SummaryExtractor.StripMarkup(result.Summary);
+        Visible = true;
+    }
+
+    public void PresentFog()
+    {
+        ApplySafeArea();
+        _body.Text = "Туман судьбы неразличим.";
+        _summary.Text = string.Empty;
         Visible = true;
     }
 

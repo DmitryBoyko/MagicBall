@@ -68,6 +68,9 @@ public partial class ContextManager : Node
             { "device_battery_aura", snap.DeviceBatteryAura },
             { "device_power_state", snap.DevicePowerState },
             { "ball_mood_modifier", snap.BallMoodModifier },
+            { "ball_tint_name", snap.BallTintName },
+            { "ball_tint_meaning", snap.BallTintMeaning },
+            { "ball_tint_modifier", snap.BallTintModifier },
             { "world_pressure_modifier", snap.WorldPressureModifier },
             { "entropy_word_anchor", snap.EntropyWordAnchor },
         };
@@ -92,6 +95,9 @@ public partial class ContextManager : Node
             BallMoodCode = mood,
             WorldPressureCode = pressure,
             BallMoodModifier = MapBallMood(mood),
+            BallTintName = SessionBallTint.Name,
+            BallTintMeaning = SessionBallTint.Meaning,
+            BallTintModifier = SessionBallTint.Modifier,
             WorldPressureModifier = MapWorldPressure(pressure),
             EntropyWordAnchor = PickAnchor(),
         };

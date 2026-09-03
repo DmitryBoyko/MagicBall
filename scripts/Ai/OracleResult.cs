@@ -27,4 +27,10 @@ public sealed class OracleResult
 
     [JsonPropertyName("similarity")]
     public float Similarity { get; set; }
+
+    public bool HasLlmAnswer =>
+        !FallbackUsed
+        && OsirisPresent
+        && string.Equals(Source, "gigachat", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(Interpretation);
 }

@@ -27,6 +27,9 @@ class DynamicSnapshot(BaseModel):
     imagenet_raw_tag: str = ""
     entropy_word_anchor: str = ""
     ball_mood_modifier: str = ""
+    ball_tint_name: str = ""
+    ball_tint_meaning: str = ""
+    ball_tint_modifier: str = ""
     world_pressure_modifier: str = ""
     ball_mood_code: int = 0
     world_pressure_code: int = 0

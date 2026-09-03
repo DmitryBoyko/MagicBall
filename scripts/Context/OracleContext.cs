@@ -67,6 +67,15 @@ public sealed class DynamicSnapshot
     [JsonPropertyName("ball_mood_modifier")]
     public string BallMoodModifier { get; set; } = string.Empty;
 
+    [JsonPropertyName("ball_tint_name")]
+    public string BallTintName { get; set; } = string.Empty;
+
+    [JsonPropertyName("ball_tint_meaning")]
+    public string BallTintMeaning { get; set; } = string.Empty;
+
+    [JsonPropertyName("ball_tint_modifier")]
+    public string BallTintModifier { get; set; } = string.Empty;
+
     [JsonPropertyName("world_pressure_modifier")]
     public string WorldPressureModifier { get; set; } = string.Empty;
 

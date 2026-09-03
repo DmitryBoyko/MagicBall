@@ -90,7 +90,8 @@ public sealed class AiGateway : IDisposable
         var s = context.DynamicSnapshot;
         return string.Join('|',
             d.UserName, d.ZodiacSign, d.DestinyNumber,
-            s.EntropyWordAnchor, s.PhotoMysticTag, s.TimeOfDay, s.BallMoodModifier);
+            s.EntropyWordAnchor, s.PhotoMysticTag, s.TimeOfDay, s.BallMoodModifier,
+            s.BallTintModifier);
     }
 
     public void Dispose()
