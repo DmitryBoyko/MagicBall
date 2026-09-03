@@ -36,10 +36,8 @@ public partial class ProfileModal : CanvasLayer
     private OptionButton? _background;
     private Button _save = null!;
     private Button? _close;
-    private Label? _permPhotos;
-    private Label? _permLocation;
-    private Button? _permGrant;
-    private Button? _permSettings;
+    private Button? _permissionsBtn;
+    private PermissionsSheet? _permissionsSheet;
     private MarginContainer? _safePad;
     private PanelContainer? _panel;
     private bool _editMode;
@@ -201,6 +199,7 @@ public partial class ProfileModal : CanvasLayer
         var inner = Mathf.Max(280f, vp.X - insets.Left - insets.Right - 8f);
         _panel.CustomMinimumSize = new Vector2(Mathf.Min(620f, inner), 0f);
         _picker?.ApplySafeArea();
+        _permissionsSheet?.ApplySafeArea();
     }
 
     private void SyncFromStore()
@@ -385,53 +384,38 @@ public partial class ProfileModal : CanvasLayer
         if (!AppPermissions.IsAndroid)
             return;
 
-        box.AddChild(UiTheme.MakeLabel("Разрешения", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
-        box.AddChild(UiTheme.MakeLabel(
-            "Галерея нужна для снимков в гадании, местоположение — для погоды и города. Если системный диалог больше не появляется, откройте настройки приложения.",
-            UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left));
-
-        _permPhotos = UiTheme.MakeLabel("", UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left);
-        _permLocation = UiTheme.MakeLabel("", UiTheme.FontModalCaption, UiTheme.Cream, HorizontalAlignment.Left);
-        box.AddChild(_permPhotos);
-        box.AddChild(_permLocation);
-
-        _permGrant = UiTheme.MakeButton("Выдать разрешения");
-        _permGrant.CustomMinimumSize = new Vector2(0, 56);
-        _permGrant.Pressed += OnGrantPermissions;
-        box.AddChild(_permGrant);
-
-        _permSettings = UiTheme.MakeQuietButton("Системные настройки приложения", UiTheme.FontModalCaption);
-        _permSettings.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        _permSettings.Pressed += OnOpenSystemSettings;
-        box.AddChild(_permSettings);
+        _permissionsBtn = UiTheme.MakeButton("Разрешения");
+        _permissionsBtn.CustomMinimumSize = new Vector2(0, 56);
+        _permissionsBtn.Pressed += OpenPermissionsSheet;
+        box.AddChild(_permissionsBtn);
         RefreshPermissionUi();
+    }
+
+    private void OpenPermissionsSheet()
+    {
+        if (_permissionsSheet == null || !GodotObject.IsInstanceValid(_permissionsSheet))
+        {
+            _permissionsSheet = new PermissionsSheet();
+            _permissionsSheet.Closed += RefreshPermissionUi;
+            AddChild(_permissionsSheet);
+        }
+
+        _permissionsSheet.Present();
+        _permissionsSheet.ApplySafeArea();
     }
 
     private void RefreshPermissionUi()
     {
-        if (_permPhotos == null || _permLocation == null)
+        if (_permissionsBtn == null)
             return;
 
         var status = AppPermissions.Check();
-        _permPhotos.Text = status.PhotosGranted ? "Галерея: выдано" : "Галерея: не выдано";
-        _permPhotos.AddThemeColorOverride("font_color", status.PhotosGranted ? UiTheme.Cyan : UiTheme.Gold);
-        _permLocation.Text = status.LocationGranted ? "Местоположение: выдано" : "Местоположение: не выдано";
-        _permLocation.AddThemeColorOverride("font_color", status.LocationGranted ? UiTheme.Cyan : UiTheme.Gold);
-
-        if (_permGrant != null)
-        {
-            _permGrant.Visible = status.HasMissing;
-            _permGrant.Disabled = !status.HasMissing;
-        }
+        _permissionsBtn.Text = "Разрешения";
+        var color = status.AllGranted ? UiTheme.PermissionOk : UiTheme.Crimson;
+        _permissionsBtn.AddThemeColorOverride("font_color", color);
+        _permissionsBtn.AddThemeColorOverride("font_hover_color", color.Lightened(0.12f));
+        _permissionsBtn.AddThemeColorOverride("font_pressed_color", color.Darkened(0.08f));
     }
-
-    private void OnGrantPermissions()
-    {
-        AppPermissions.RequestMissing();
-        RefreshPermissionUi();
-    }
-
-    private void OnOpenSystemSettings() => AppPermissions.OpenSystemSettings();
 
     private void OnOsPermissionResult(string _permission, bool _granted) => RefreshPermissionUi();
 }

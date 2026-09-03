@@ -3,8 +3,8 @@ using Godot;
 namespace CrystalBall.App;
 
 /// <summary>
-/// Runtime-разрешения как в AtlasPhoto: запрос при старте и повтор из настроек.
-/// Нужны галерея (фото в промпт) и геолокация (погода / населённый пункт).
+/// Runtime-разрешения: галерея (фото в промпт) и геолокация (погода / город).
+/// Запрос поштучно из онбординг-модалки и из настроек.
 /// </summary>
 public readonly record struct AppPermissionStatus(bool PhotosGranted, bool LocationGranted)
 {
@@ -33,15 +33,20 @@ public static class AppPermissions
         return new AppPermissionStatus(PhotosGranted(granted), LocationGranted(granted));
     }
 
-    public static bool RequestAll()
+    public static void RequestPhotos()
     {
-        if (!IsAndroid)
-            return true;
-
-        var already = OS.RequestPermissions();
-        foreach (var name in RequiredPermissions())
+        if (!IsAndroid || Check().PhotosGranted)
+            return;
+        foreach (var name in PhotoPermissions())
             OS.RequestPermission(name);
-        return already && !Check().HasMissing;
+    }
+
+    public static void RequestLocation()
+    {
+        if (!IsAndroid || Check().LocationGranted)
+            return;
+        OS.RequestPermission(FineLocation);
+        OS.RequestPermission(CoarseLocation);
     }
 
     public static bool RequestMissing()
@@ -52,19 +57,10 @@ public static class AppPermissions
         var status = Check();
         if (status.AllGranted)
             return true;
-
-        if (!status.LocationGranted)
-        {
-            OS.RequestPermission(FineLocation);
-            OS.RequestPermission(CoarseLocation);
-        }
-
         if (!status.PhotosGranted)
-        {
-            foreach (var name in PhotoPermissions())
-                OS.RequestPermission(name);
-        }
-
+            RequestPhotos();
+        if (!status.LocationGranted)
+            RequestLocation();
         return Check().AllGranted;
     }
 
@@ -97,19 +93,7 @@ public static class AppPermissions
         return instance?.Call("sdk_int").AsInt32() ?? 0;
     }
 
-    private static string[] RequiredPermissions()
-    {
-        var photos = PhotoPermissions();
-        var list = new List<string>(photos.Length + 2)
-        {
-            FineLocation,
-            CoarseLocation,
-        };
-        list.AddRange(photos);
-        return [.. list];
-    }
-
-    private static string[] PhotoPermissions()
+    public static string[] PhotoPermissions()
     {
         var sdk = AndroidSdk();
         if (sdk >= 33)

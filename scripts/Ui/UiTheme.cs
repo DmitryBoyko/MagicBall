@@ -7,6 +7,7 @@ public static class UiTheme
     public static readonly Color Gold = new(1f, 0.82f, 0.28f);
     public static readonly Color Purple = new(0.48f, 0.18f, 1f);
     public static readonly Color Crimson = new(1f, 0.18f, 0.42f);
+    public static readonly Color PermissionOk = new(0.32f, 0.88f, 0.48f);
     public static readonly Color Cyan = new(0.05f, 0.96f, 1f);
     public static readonly Color Magenta = new(1f, 0.38f, 0.88f);
     public static readonly Color Cream = new(0.96f, 0.90f, 0.80f);

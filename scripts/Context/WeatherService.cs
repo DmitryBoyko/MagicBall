@@ -6,8 +6,8 @@ using Godot;
 namespace CrystalBall.Context;
 
 /// <summary>
-/// Погода по координатам без ключа: Open-Meteo и met.no параллельно, первый успешный ответ.
-/// Таймаут 3 секунды; кэш 30 минут. При сбое поле сбрасывается и не идёт в промпт.
+/// Погода только по device-координатам (без IP): Open-Meteo и met.no параллельно.
+/// Таймаут 3 секунды; кэш 30 минут. Нет GPS — поле не идёт в промпт.
 /// </summary>
 public static class WeatherService
 {
@@ -79,9 +79,6 @@ public static class WeatherService
         try
         {
             var coords = GeoLocationService.TryReadDeviceCoords();
-            if (coords == null)
-                coords = await LookupIpAsync(cancellationToken).ConfigureAwait(false);
-
             cancellationToken.ThrowIfCancellationRequested();
             if (coords == null)
             {
@@ -195,22 +192,6 @@ public static class WeatherService
         if (code == null && temp == null)
             return null;
         return FormatWmo(code ?? 0, temp);
-    }
-
-    private static async Task<(double Lat, double Lon)?> LookupIpAsync(CancellationToken cancellationToken)
-    {
-        var json = await GetJsonAsync(
-            "http://ip-api.com/json/?fields=status,lat,lon",
-            cancellationToken).ConfigureAwait(false);
-        if (json == null)
-            return null;
-        if (!json.Value.TryGetProperty("status", out var status) || status.GetString() != "success")
-            return null;
-        var lat = json.Value.TryGetProperty("lat", out var latEl) ? latEl.GetDouble() : 0;
-        var lon = json.Value.TryGetProperty("lon", out var lonEl) ? lonEl.GetDouble() : 0;
-        if (Math.Abs(lat) < 0.0001 && Math.Abs(lon) < 0.0001)
-            return null;
-        return (lat, lon);
     }
 
     private static string FormatWmo(int code, double? temp)

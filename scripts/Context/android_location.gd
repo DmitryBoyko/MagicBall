@@ -1,10 +1,10 @@
 class_name AndroidLocationProbe
 extends RefCounted
-## Last-known GPS/network fix via Android LocationManager.
+## Last-known GPS/network fix via Android LocationManager (with accuracy).
 
 
 static func read_lat_lon() -> Dictionary:
-	var empty := {"ok": false, "lat": 0.0, "lon": 0.0}
+	var empty := {"ok": false, "lat": 0.0, "lon": 0.0, "accuracy": 1.0e9, "provider": ""}
 	if OS.get_name() != "Android":
 		return empty
 	if not Engine.has_singleton("JavaClassWrapper"):
@@ -21,6 +21,8 @@ static func read_lat_lon() -> Dictionary:
 
 	var best: Object = null
 	var best_acc := 1.0e9
+	var best_provider := ""
+	# GPS предпочтительнее network/passive при равной/близкой точности.
 	for provider in ["gps", "network", "passive"]:
 		var fix: Object = null
 		if loc.has_method("getLastKnownLocation"):
@@ -30,9 +32,13 @@ static func read_lat_lon() -> Dictionary:
 		var acc := 5000.0
 		if fix.has_method("getAccuracy"):
 			acc = float(fix.getAccuracy())
-		if acc < best_acc:
+		if acc <= 0.0:
+			continue
+		var prefer_gps := provider == "gps" and best_provider != "gps" and acc <= best_acc * 1.25
+		if acc < best_acc or prefer_gps:
 			best = fix
 			best_acc = acc
+			best_provider = provider
 
 	if best == null or not best.has_method("getLatitude") or not best.has_method("getLongitude"):
 		return empty
@@ -40,6 +46,8 @@ static func read_lat_lon() -> Dictionary:
 		"ok": true,
 		"lat": float(best.getLatitude()),
 		"lon": float(best.getLongitude()),
+		"accuracy": best_acc,
+		"provider": best_provider,
 	}
 
 

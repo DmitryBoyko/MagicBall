@@ -6,12 +6,14 @@ using Godot;
 namespace CrystalBall.Context;
 
 /// <summary>
-/// GPS (Android) → reverse geocode как в LBSDetector: Nominatim, затем Photon.
-/// Весь запрос ограничен 3 секундами; при таймауте параметр сбрасывается и не идёт в промпт.
+/// Только device GPS/network с accuracy ≤ порога → Nominatim, затем Photon.
+/// Без IP-геолокации: нет валидных координат — в промпт ничего не уходит.
 /// </summary>
 public static class GeoLocationService
 {
     public const double MaxSeconds = 3;
+    /// <summary>Отсекает грубые network/IP-подобные фиксы (сотни км).</summary>
+    public const double MaxAccuracyMeters = 2000;
 
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
@@ -29,6 +31,8 @@ public static class GeoLocationService
     public static string Settlement => _settlement ?? "";
 
     public static (double Lat, double Lon)? LastCoords { get; private set; }
+
+    public static double? LastAccuracyMeters { get; private set; }
 
     public static void Warmup()
     {
@@ -62,12 +66,15 @@ public static class GeoLocationService
     }
 
     private static bool IsFresh() =>
-        HasSettlement && _resolvedUtc != DateTime.MinValue && DateTime.UtcNow - _resolvedUtc < CacheTtl;
+        HasSettlement && LastCoords != null && _resolvedUtc != DateTime.MinValue
+        && DateTime.UtcNow - _resolvedUtc < CacheTtl;
 
     private static void Reset()
     {
         _settlement = "";
         _resolvedUtc = DateTime.MinValue;
+        LastCoords = null;
+        LastAccuracyMeters = null;
     }
 
     private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken)
@@ -79,37 +86,27 @@ public static class GeoLocationService
                 return Settlement;
 
             RequestAndroidPermission();
-            var coords = ReadAndroidCoords();
-            string? fromIpCity = null;
-            if (coords == null)
-            {
-                var ip = await LookupIpAsync(cancellationToken).ConfigureAwait(false);
-                if (ip != null)
-                {
-                    coords = (ip.Value.Lat, ip.Value.Lon);
-                    fromIpCity = ip.Value.City;
-                }
-            }
-
+            var fix = ReadAndroidFix();
             cancellationToken.ThrowIfCancellationRequested();
-            if (coords != null)
+
+            if (fix == null)
             {
-                LastCoords = coords;
-                var named = await ReverseGeocodeAsync(coords.Value.Lat, coords.Value.Lon, cancellationToken)
-                    .ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(named))
-                {
-                    Store(named);
-                    return Settlement;
-                }
+                Reset();
+                return "";
             }
 
-            if (!string.IsNullOrWhiteSpace(fromIpCity) && coords != null)
+            LastCoords = (fix.Value.Lat, fix.Value.Lon);
+            LastAccuracyMeters = fix.Value.AccuracyMeters;
+
+            var named = await ReverseGeocodeAsync(fix.Value.Lat, fix.Value.Lon, cancellationToken)
+                .ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(named))
             {
-                Store(AppendTerrain(fromIpCity, "город", null, coords.Value.Lat, coords.Value.Lon));
+                Store(named);
                 return Settlement;
             }
 
+            // Reverse пустой — город в промпт не подставляем (IP-fallback убран).
             Reset();
             return "";
         }
@@ -123,12 +120,31 @@ public static class GeoLocationService
     {
         _settlement = name.Trim();
         _resolvedUtc = HasSettlement ? DateTime.UtcNow : DateTime.MinValue;
+        if (!HasSettlement)
+        {
+            LastCoords = null;
+            LastAccuracyMeters = null;
+        }
     }
 
-    public static (double Lat, double Lon)? TryReadDeviceCoords() =>
-        ReadAndroidCoords() ?? LastCoords;
+    /// <summary>Только свежий device-fix с допустимой точностью (без IP).</summary>
+    public static (double Lat, double Lon)? TryReadDeviceCoords()
+    {
+        var fix = ReadAndroidFix();
+        if (fix != null)
+        {
+            LastCoords = (fix.Value.Lat, fix.Value.Lon);
+            LastAccuracyMeters = fix.Value.AccuracyMeters;
+            return LastCoords;
+        }
 
-    private static (double Lat, double Lon)? ReadAndroidCoords()
+        // Кэш только от успешного device-фикса (не IP).
+        if (LastCoords != null && LastAccuracyMeters is <= MaxAccuracyMeters)
+            return LastCoords;
+        return null;
+    }
+
+    private static (double Lat, double Lon, double AccuracyMeters)? ReadAndroidFix()
     {
         if (OS.GetName() != "Android")
             return null;
@@ -150,7 +166,15 @@ public static class GeoLocationService
         var lon = dict["lon"].AsDouble();
         if (Math.Abs(lat) < 0.0001 && Math.Abs(lon) < 0.0001)
             return null;
-        return (lat, lon);
+
+        var accuracy = dict.ContainsKey("accuracy") ? dict["accuracy"].AsDouble() : double.MaxValue;
+        if (accuracy <= 0 || accuracy > MaxAccuracyMeters)
+        {
+            GD.Print($"[GeoLocation] fix rejected accuracy={accuracy:F0}m (max {MaxAccuracyMeters})");
+            return null;
+        }
+
+        return (lat, lon, accuracy);
     }
 
     private static async Task<string?> ReverseGeocodeAsync(double lat, double lon, CancellationToken cancellationToken)
@@ -203,25 +227,6 @@ public static class GeoLocationService
         if (string.IsNullOrWhiteSpace(settlement))
             return null;
         return AppendTerrain(settlement, kind, First(props, "region", "state"), lat, lon);
-    }
-
-    private static async Task<(double Lat, double Lon, string City)?> LookupIpAsync(CancellationToken cancellationToken)
-    {
-        var json = await GetJsonAsync(
-            "http://ip-api.com/json/?lang=ru&fields=status,city,regionName,lat,lon",
-            cancellationToken).ConfigureAwait(false);
-        if (json == null)
-            return null;
-        if (!json.Value.TryGetProperty("status", out var status) || status.GetString() != "success")
-            return null;
-        var lat = json.Value.TryGetProperty("lat", out var latEl) ? latEl.GetDouble() : 0;
-        var lon = json.Value.TryGetProperty("lon", out var lonEl) ? lonEl.GetDouble() : 0;
-        var city = First(json.Value, "city");
-        var region = First(json.Value, "regionName");
-        var label = FormatSettlement(city, region);
-        if (string.IsNullOrWhiteSpace(label) && Math.Abs(lat) < 0.0001 && Math.Abs(lon) < 0.0001)
-            return null;
-        return (lat, lon, label ?? "");
     }
 
     private static string? FormatSettlement(string? place, string? region)

@@ -29,6 +29,7 @@ public partial class MainScene : Control
     private Button _otherApps = null!;
     private SettingsGearButton _gear = null!;
     private ProfileModal _modal = null!;
+    private PermissionsOnboardingModal _permissionsOnboarding = null!;
     private AdOverlay _ads = null!;
     private InterpretationSheet _sheet = null!;
     private CastingLogSheet _casting = null!;
@@ -73,9 +74,26 @@ public partial class MainScene : Control
         ApplyBackground();
         _modal.Saved += _ => ApplyBackground();
         GetViewport().SizeChanged += ApplySafeArea;
-        if (ProfileStore.Current is not { IsComplete: true })
-            _modal.Present(editMode: false);
         CallDeferred(MethodName.ApplySafeArea);
+        CallDeferred(MethodName.PresentStartupModals);
+    }
+
+    private void PresentStartupModals()
+    {
+        var needProfile = ProfileStore.Current is not { IsComplete: true };
+        var shownPerms = _permissionsOnboarding.TryPresent();
+        if (shownPerms)
+        {
+            _permissionsOnboarding.Closed += () =>
+            {
+                if (needProfile)
+                    _modal.Present(editMode: false);
+            };
+            return;
+        }
+
+        if (needProfile)
+            _modal.Present(editMode: false);
     }
 
     public override void _Process(double delta)
@@ -98,6 +116,7 @@ public partial class MainScene : Control
             return;
         SafeAreaHelper.Apply(_uiPad, this);
         _modal?.ApplySafeArea();
+        _permissionsOnboarding?.ApplySafeArea();
         _ads?.ApplySafeArea();
         LayoutBall();
         LayoutReadingSheet();
@@ -191,7 +210,8 @@ public partial class MainScene : Control
         _gear.Pressed += () => _modal.Present(editMode: true);
         footer.AddChild(_gear);
         footer.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        _otherApps = UiTheme.MakeQuietButton("Другие приложения");
+        _otherApps = UiTheme.MakeQuietButton("Другие приложения", 22);
+        _otherApps.CustomMinimumSize = new Vector2(0, 56);
         _otherApps.Pressed += OnOtherApps;
         footer.AddChild(_otherApps);
         bottom.AddChild(footer);
@@ -209,6 +229,8 @@ public partial class MainScene : Control
         AddChild(_context);
         _modal = new ProfileModal { Visible = false };
         AddChild(_modal);
+        _permissionsOnboarding = new PermissionsOnboardingModal { Visible = false };
+        AddChild(_permissionsOnboarding);
         _ads = new AdOverlay();
         AddChild(_ads);
         _sheet = new InterpretationSheet();

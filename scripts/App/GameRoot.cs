@@ -29,7 +29,6 @@ public partial class GameRoot : Node
         CallDeferred(MethodName.WarmupDeferred);
         CallDeferred(MethodName.ProbeSafeArea);
         CallDeferred(MethodName.WarmupLocation);
-        CallDeferred(MethodName.RequestRuntimePermissions);
         if (OS.GetName() == "Android")
         {
             ScheduleInsetProbe(0.35);
@@ -65,8 +64,6 @@ public partial class GameRoot : Node
         GeoLocationService.Warmup();
         WeatherService.Warmup();
     }
-
-    private void RequestRuntimePermissions() => AppPermissions.RequestAll();
 
     private async void WarmupDeferred()
     {

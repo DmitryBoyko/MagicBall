@@ -11,8 +11,10 @@ public partial class CyberpunkLabeledSwitch : PanelContainer
 
     private Label _label = null!;
     private CyberpunkSwitch _switch = null!;
+    private bool _locked;
 
     public bool ButtonPressed => _switch.ButtonPressed;
+    public bool Locked => _locked;
 
     public static CyberpunkLabeledSwitch Create(
         string text,
@@ -27,6 +29,13 @@ public partial class CyberpunkLabeledSwitch : PanelContainer
     }
 
     public void SetPressedNoSignal(bool on) => _switch.SetPressedNoSignal(on);
+
+    public void SetLocked(bool locked)
+    {
+        _locked = locked;
+        MouseDefaultCursorShape = locked ? CursorShape.Arrow : CursorShape.PointingHand;
+        Modulate = locked ? new Color(1f, 1f, 1f, 0.92f) : Colors.White;
+    }
 
     private void Build(string text, Color accent, int fontSize, float minHeight, float switchScale)
     {
@@ -70,6 +79,12 @@ public partial class CyberpunkLabeledSwitch : PanelContainer
 
     private void OnRowInput(InputEvent @event)
     {
+        if (_locked)
+        {
+            AcceptEvent();
+            return;
+        }
+
         if (@event is InputEventMouseButton && DisplayServer.IsTouchscreenAvailable())
         {
             AcceptEvent();
