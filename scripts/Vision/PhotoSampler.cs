@@ -14,60 +14,22 @@ public readonly record struct PhotoFrame(
     double Luminance);
 
 /// <summary>
-/// Последние N фото из галереи: грузит по одному, инференс в фоне, в промпт — одна сводка.
+/// Скан галереи с кэшем: 1 кадр при старте, остальное — по «Спросить».
 /// </summary>
 public static class PhotoSampler
 {
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, PhotoFrame> FrameCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<string> CacheOrder = [];
+    private static Task? _warmupTask;
+    private static int _warmupGeneration;
+
     public static async Task<PhotoAnalysis> AnalyzeRecentAsync(CastingProgress? casting = null)
     {
         if (casting != null)
             await casting.ReportAsync(CastingStage.PhotoScan).ConfigureAwait(true);
 
-        var preprocessor = new ImagePreprocessor();
-        var take = AppConfig.Current.PhotoLookbackCount;
-        var paths = preprocessor.ListLatestGalleryPaths(take);
-        var engine = OnnxInferenceEngine.Instance;
-        if (engine is { IsInitialized: false })
-            await engine.InitializeEngineAsync().ConfigureAwait(true);
-
-        InferenceWorker? worker = engine != null ? new InferenceWorker(engine) : null;
-        var frames = new List<PhotoFrame>(paths.Count);
-
-        foreach (var path in paths)
-        {
-            var image = preprocessor.TryLoadFile(path);
-            if (image == null)
-                continue;
-            try
-            {
-                frames.Add(await AnalyzeFrameAsync(preprocessor, worker, engine, image).ConfigureAwait(true));
-            }
-            finally
-            {
-                image.Dispose();
-            }
-
-            await YieldFrameAsync().ConfigureAwait(true);
-        }
-
-        PhotoAnalysis analysis;
-        if (frames.Count > 0)
-        {
-            analysis = ImagePreprocessor.Merge(frames);
-        }
-        else
-        {
-            var fallback = preprocessor.LoadFallbackImage();
-            try
-            {
-                analysis = ImagePreprocessor.Merge(
-                    [await AnalyzeFrameAsync(preprocessor, worker, engine, fallback).ConfigureAwait(true)]);
-            }
-            finally
-            {
-                fallback.Dispose();
-            }
-        }
+        var analysis = await AnalyzeRecentCoreAsync().ConfigureAwait(true);
 
         if (casting != null)
         {
@@ -79,14 +41,149 @@ public static class PhotoSampler
         return analysis;
     }
 
-    private static async Task<PhotoFrame> AnalyzeFrameAsync(
-        ImagePreprocessor preprocessor,
+    /// <summary>
+    /// Прогрев одного свежего кадра после старта / возврата в приложение.
+    /// </summary>
+    public static Task WarmupAsync(int count = 1)
+    {
+        count = Math.Clamp(count, 1, AppConfig.MaxPhotoLookback);
+        var generation = Interlocked.Increment(ref _warmupGeneration);
+        var task = WarmupCoreAsync(count, generation);
+        lock (Gate)
+            _warmupTask = task;
+        return task;
+    }
+
+    /// <summary>
+    /// Полная сводка: кэш + недостающие кадры до photo_lookback_count.
+    /// </summary>
+    public static async Task<PhotoAnalysis> AnalyzeRecentCoreAsync()
+    {
+        await YieldFrameAsync().ConfigureAwait(true);
+
+        Task? warmup;
+        lock (Gate)
+            warmup = _warmupTask;
+        if (warmup is { IsCompleted: false })
+            await warmup.ConfigureAwait(true);
+
+        var take = AppConfig.Current.PhotoLookbackCount;
+        return await AnalyzePathsAsync(take).ConfigureAwait(true);
+    }
+
+    private static async Task WarmupCoreAsync(int count, int generation)
+    {
+        await YieldFrameAsync().ConfigureAwait(true);
+
+        // На Android ждём выдачи галереи — иначе прогрев пустой.
+        for (var i = 0; i < 20 && generation == _warmupGeneration; i++)
+        {
+            if (!AppPermissions.IsAndroid || AppPermissions.Check().PhotosGranted)
+                break;
+            await DelaySecondsAsync(0.25).ConfigureAwait(true);
+        }
+
+        if (generation != _warmupGeneration)
+            return;
+
+        if (AppPermissions.IsAndroid && !AppPermissions.Check().PhotosGranted)
+            return;
+
+        try
+        {
+            await AnalyzePathsAsync(count).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[PhotoSampler] warmup: {ex.Message}");
+        }
+    }
+
+    private static async Task<PhotoAnalysis> AnalyzePathsAsync(int take)
+    {
+        var preprocessor = new ImagePreprocessor();
+        var paths = preprocessor.ListLatestGalleryPaths(take);
+        await YieldFrameAsync().ConfigureAwait(true);
+
+        var engine = OnnxInferenceEngine.Instance;
+        if (engine is { IsInitialized: false })
+            await engine.InitializeEngineAsync().ConfigureAwait(true);
+
+        InferenceWorker? worker = engine != null ? new InferenceWorker(engine) : null;
+        var frames = new List<PhotoFrame>(paths.Count);
+
+        foreach (var path in paths)
+        {
+            await YieldFrameAsync().ConfigureAwait(true);
+
+            if (TryGetCached(path, out var cached))
+            {
+                frames.Add(cached);
+                continue;
+            }
+
+            var prepared = preprocessor.TryPrepareFrame(path);
+            if (prepared == null)
+                continue;
+
+            var frame = await AnalyzePreparedAsync(worker, engine, prepared.Value).ConfigureAwait(true);
+            Remember(path, frame);
+            frames.Add(frame);
+            await YieldFrameAsync().ConfigureAwait(true);
+        }
+
+        if (frames.Count > 0)
+            return ImagePreprocessor.Merge(frames);
+
+        await YieldFrameAsync().ConfigureAwait(true);
+        const string fallbackKey = "__fallback__";
+        if (TryGetCached(fallbackKey, out var fallbackCached))
+            return ImagePreprocessor.Merge([fallbackCached]);
+
+        var fallback = preprocessor.PrepareFallbackFrame();
+        var fallbackFrame = await AnalyzePreparedAsync(worker, engine, fallback).ConfigureAwait(true);
+        Remember(fallbackKey, fallbackFrame);
+        return ImagePreprocessor.Merge([fallbackFrame]);
+    }
+
+    private static bool TryGetCached(string path, out PhotoFrame frame)
+    {
+        lock (Gate)
+            return FrameCache.TryGetValue(path, out frame);
+    }
+
+    private static void Remember(string path, PhotoFrame frame)
+    {
+        lock (Gate)
+        {
+            if (!FrameCache.ContainsKey(path))
+                CacheOrder.Add(path);
+            FrameCache[path] = frame;
+
+            var keep = Math.Max(AppConfig.MaxPhotoLookback * 2, 8);
+            while (CacheOrder.Count > keep)
+            {
+                var old = CacheOrder[0];
+                CacheOrder.RemoveAt(0);
+                FrameCache.Remove(old);
+            }
+        }
+    }
+
+    private static async Task<PhotoFrame> AnalyzePreparedAsync(
         InferenceWorker? worker,
         OnnxInferenceEngine? engine,
-        Image image)
+        ImagePreprocessor.PreparedFrame prepared)
     {
-        var (palette, luminance) = preprocessor.SampleVisuals(image);
-        var tensor = preprocessor.ToNchwTensor(image);
+        var visualsTask = Task.Run(() =>
+        {
+            var (palette, luminance) = ImagePreprocessor.SampleVisualsFromRgb(
+                prepared.Rgb224, prepared.Width, prepared.Height);
+            var tensor = ImagePreprocessor.ToNchwTensorFromRgb(prepared.Rgb224, prepared.Width, prepared.Height);
+            return (palette, luminance, tensor);
+        });
+
+        var (palette, luminance, tensor) = await visualsTask.ConfigureAwait(true);
 
         if (worker == null || engine is not { IsAvailable: true })
         {
@@ -102,5 +199,18 @@ public static class PhotoSampler
     {
         if (Engine.GetMainLoop() is SceneTree tree)
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static async Task DelaySecondsAsync(double seconds)
+    {
+        if (Engine.GetMainLoop() is SceneTree tree)
+        {
+            var end = Time.GetTicksMsec() + (ulong)(seconds * 1000.0);
+            while (Time.GetTicksMsec() < end)
+                await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            return;
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(seconds)).ConfigureAwait(true);
     }
 }

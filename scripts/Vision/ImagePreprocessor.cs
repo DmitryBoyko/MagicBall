@@ -6,11 +6,13 @@ namespace CrystalBall.Vision;
 
 /// <summary>
 /// Готовит кадр для MobileNetV2: 224×224, RGB8, нормализация ImageNet, тензор NCHW.
-/// Вызывать только с главного потока Godot.
+/// Godot Image — только с главного потока; байтовый тензор/палитра можно считать в фоне.
 /// </summary>
 public sealed class ImagePreprocessor
 {
     public const string TestTexturePath = "res://assets/test/sample_photo.png";
+
+    public readonly record struct PreparedFrame(byte[] Rgb224, int Width, int Height);
 
     private static readonly float[] ImageNetMean = [0.485f, 0.456f, 0.406f];
     private static readonly float[] ImageNetStd = [0.229f, 0.224f, 0.225f];
@@ -47,6 +49,34 @@ public sealed class ImagePreprocessor
         }
     }
 
+    public PreparedFrame? TryPrepareFrame(string path)
+    {
+        var image = TryLoadFile(path);
+        if (image == null)
+            return null;
+        try
+        {
+            return PrepareRgb224(image);
+        }
+        finally
+        {
+            image.Dispose();
+        }
+    }
+
+    public PreparedFrame PrepareFallbackFrame()
+    {
+        var image = LoadFallbackImage();
+        try
+        {
+            return PrepareRgb224(image);
+        }
+        finally
+        {
+            image.Dispose();
+        }
+    }
+
     public List<string> ListLatestGalleryPaths(int take)
     {
         take = Math.Clamp(take, 1, AppConfig.MaxPhotoLookback);
@@ -63,16 +93,19 @@ public sealed class ImagePreprocessor
 
     public float[] ToNchwTensor(Image source)
     {
-        using var work = new Image();
-        work.CopyFrom(source);
-        if (work.GetFormat() != Image.Format.Rgb8)
-            work.Convert(Image.Format.Rgb8);
+        var prepared = PrepareRgb224(source);
+        return ToNchwTensorFromRgb(prepared.Rgb224, prepared.Width, prepared.Height);
+    }
 
-        work.Resize(AppConfig.ImageSize, AppConfig.ImageSize, Image.Interpolation.Lanczos);
-        if (work.GetFormat() != Image.Format.Rgb8)
-            work.Convert(Image.Format.Rgb8);
+    public static float[] ToNchwTensorFromRgb(byte[] pixels, int width, int height)
+    {
+        if (pixels == null)
+            throw new ArgumentNullException(nameof(pixels));
+        if (width != AppConfig.ImageSize || height != AppConfig.ImageSize)
+            throw new ArgumentException($"Ожидался RGB {AppConfig.ImageSize}×{AppConfig.ImageSize}.");
+        if (pixels.Length < width * height * 3)
+            throw new ArgumentException("Недостаточно байт RGB.", nameof(pixels));
 
-        var pixels = work.GetData();
         var tensor = new float[AppConfig.TensorLength];
         const int size = AppConfig.ImageSize;
         const int plane = size * size;
@@ -111,21 +144,38 @@ public sealed class ImagePreprocessor
         using var work = new Image();
         work.CopyFrom(source);
         work.Resize(32, 32, Image.Interpolation.Nearest);
+        if (work.GetFormat() != Image.Format.Rgb8)
+            work.Convert(Image.Format.Rgb8);
+        return SampleVisualsFromRgb(work.GetData(), work.GetWidth(), work.GetHeight());
+    }
+
+    public static (Dictionary<string, int> Palette, double Luminance) SampleVisualsFromRgb(
+        byte[] pixels, int width, int height)
+    {
         var buckets = new Dictionary<string, int>();
         double sum = 0;
-        var count = work.GetWidth() * work.GetHeight();
-        for (var y = 0; y < work.GetHeight(); y++)
+        var count = Math.Max(1, width * height);
+        // Даунсэмпл до ~32×32 без Godot Image — безопасно в фоне.
+        var stepX = Math.Max(1, width / 32);
+        var stepY = Math.Max(1, height / 32);
+        var samples = 0;
+        for (var y = 0; y < height; y += stepY)
         {
-            for (var x = 0; x < work.GetWidth(); x++)
+            for (var x = 0; x < width; x += stepX)
             {
-                var pixel = work.GetPixel(x, y);
-                var name = NameColor(pixel);
+                var src = (y * width + x) * 3;
+                var r = pixels[src] / 255f;
+                var g = pixels[src + 1] / 255f;
+                var b = pixels[src + 2] / 255f;
+                var color = new Color(r, g, b);
+                var name = NameColor(color);
                 buckets[name] = buckets.GetValueOrDefault(name) + 1;
-                sum += pixel.Luminance;
+                sum += color.Luminance;
+                samples++;
             }
         }
 
-        return (buckets, sum / Math.Max(count, 1));
+        return (buckets, sum / Math.Max(samples, 1));
     }
 
     public static PhotoAnalysis Merge(IReadOnlyList<PhotoFrame> frames)
@@ -161,6 +211,21 @@ public sealed class ImagePreprocessor
     {
         var paths = ListLatestGalleryPaths(1);
         return paths.Count == 0 ? null : TryLoadFile(paths[0]);
+    }
+
+    private static PreparedFrame PrepareRgb224(Image source)
+    {
+        using var work = new Image();
+        work.CopyFrom(source);
+        if (work.GetFormat() != Image.Format.Rgb8)
+            work.Convert(Image.Format.Rgb8);
+
+        // Bilinear быстрее Lanczos — меньше фриз на main thread.
+        work.Resize(AppConfig.ImageSize, AppConfig.ImageSize, Image.Interpolation.Bilinear);
+        if (work.GetFormat() != Image.Format.Rgb8)
+            work.Convert(Image.Format.Rgb8);
+
+        return new PreparedFrame(work.GetData(), work.GetWidth(), work.GetHeight());
     }
 
     private static void CollectImages(string directory, int depth, List<(string Path, ulong Time)> into)

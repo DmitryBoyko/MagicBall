@@ -16,8 +16,8 @@ public sealed class AppConfig
     public const int VortexParticleCount = 2600;
     public const int TensorLength = 150528;
     public const int ImageSize = 224;
-    public const int DefaultPhotoLookback = 4;
-    public const int MinPhotoLookback = 3;
+    public const int DefaultPhotoLookback = 2;
+    public const int MinPhotoLookback = 1;
     public const int MaxPhotoLookback = 10;
 
     [JsonPropertyName("gigachat_oauth_url")]

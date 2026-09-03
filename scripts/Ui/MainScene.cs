@@ -654,6 +654,9 @@ public partial class MainScene : Control
     {
         var casting = new CastingProgress(_casting, GetTree());
 
+        // Скан галереи параллельно с ранними стадиями протокола и вортексом.
+        var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
+
         await casting.ReportAsync(CastingStage.Name);
         await casting.ReportAsync(CastingStage.Zodiac);
         await casting.ReportAsync(CastingStage.Destiny);
@@ -672,7 +675,11 @@ public partial class MainScene : Control
         await casting.ReportAsync(CastingStage.Power);
         await casting.ReportAsync(CastingStage.InquiryPulse);
 
-        var photo = await PhotoSampler.AnalyzeRecentAsync(casting);
+        await casting.ReportAsync(CastingStage.PhotoScan);
+        var photo = await photoTask;
+        await casting.ReportAsync(CastingStage.PhotoMystic);
+        await casting.ReportAsync(CastingStage.PhotoPalette);
+        await casting.ReportAsync(CastingStage.PhotoLuminance);
 
         var context = _context.Assemble(profile, photo);
         context.DynamicSnapshot.GeoLocationType = string.IsNullOrWhiteSpace(geo) ? null : geo;

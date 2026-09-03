@@ -45,6 +45,8 @@ public partial class GameRoot : Node
             ProbeSafeArea();
             GeoLocationService.Warmup();
             WeatherService.Warmup();
+            // Обновить самый свежий кадр, если пользователь вернулся из галереи.
+            _ = PhotoSampler.WarmupAsync(1);
         }
     }
 
@@ -72,6 +74,9 @@ public partial class GameRoot : Node
         if (engine != null)
             await engine.InitializeEngineAsync();
         EngineReady = true;
+
+        // После ONNX — один кадр в фоне, остальное доберёт «Спросить».
+        await PhotoSampler.WarmupAsync(1);
     }
 
     public override void _ExitTree()
