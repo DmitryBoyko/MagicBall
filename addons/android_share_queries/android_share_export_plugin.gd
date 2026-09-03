@@ -8,18 +8,14 @@ func _get_name() -> String:
 
 
 func _supports_platform(platform: EditorExportPlatform) -> bool:
-	return platform.get_name() == "Android"
+	return platform is EditorExportPlatformAndroid
 
 
-func _get_android_manifest_application_element_contents(platform: EditorExportPlatform, _debug: bool) -> String:
-	if platform.get_name() != "Android":
-		return ""
+func _get_android_manifest_application_element_contents(_platform: EditorExportPlatform, _debug: bool) -> String:
 	return 'android:usesCleartextTraffic="true"\n'
 
 
-func _get_android_manifest_element_contents(platform: EditorExportPlatform, _debug: bool) -> String:
-	if platform.get_name() != "Android":
-		return ""
+func _get_android_manifest_element_contents(_platform: EditorExportPlatform, _debug: bool) -> String:
 	return (
 		'<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n'
 		+ '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n'
