@@ -16,7 +16,7 @@ func _exit_tree() -> void:
 
 class AndroidExportPlugin extends EditorExportPlugin:
 	const _PLUGIN_NAME := "OnnxRuntimeAndroid"
-	const _AAR_PATH := "packages/microsoft.ml.onnxruntime/1.19.0/runtimes/android/native/onnxruntime.aar"
+	const _AAR_PATH := "OnnxRuntimeAndroid/bin/onnxruntime.aar"
 
 
 	func _supports_platform(platform) -> bool:

@@ -97,7 +97,18 @@ function Ensure-GradleSuppress {
     Write-Host "OK - gradle suppressUnsupportedCompileSdk=36"
 }
 
-function Ensure-Dotnet {
+function Ensure-OnnxAar {
+    $dest = Join-Path $Root "addons\OnnxRuntimeAndroid\bin\onnxruntime.aar"
+    $src = Join-Path $Root "packages\microsoft.ml.onnxruntime\1.19.0\runtimes\android\native\onnxruntime.aar"
+    if (-not (Test-Path $src)) {
+        Write-Warning "ONNX package missing. Run: dotnet restore MagicBall.csproj"
+        return
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+    Copy-Item $src $dest -Force
+    Write-Host "OK - onnxruntime.aar"
+}
+
     $sln = Join-Path $Root "MagicBall.sln"
     if (-not (Test-Path $sln)) {
         Write-Error "Missing $sln"
@@ -115,6 +126,7 @@ function Ensure-Dotnet {
 Write-Host "=== MagicalBall Android export setup ==="
 Ensure-AndroidTemplate
 Ensure-YandexAars
+Ensure-OnnxAar
 Ensure-Sdk
 Ensure-GradleSuppress
 Ensure-Jdk17
