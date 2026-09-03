@@ -16,13 +16,9 @@ func _get_android_manifest_application_element_contents(_platform: EditorExportP
 
 
 func _get_android_manifest_element_contents(_platform: EditorExportPlatform, _debug: bool) -> String:
+	# Permissions are set in export_presets.cfg — only add package-visibility queries here.
 	return (
-		'<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n'
-		+ '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n'
-		+ '<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n'
-		+ '<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />\n'
-		+ '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n'
-		+ "<queries>\n"
+		"<queries>\n"
 		+ '<intent><action android:name="android.intent.action.SEND" /><data android:mimeType="image/*" /></intent>\n'
 		+ "</queries>\n"
 	)

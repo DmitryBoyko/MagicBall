@@ -29,6 +29,7 @@ API для Android: `http://147.45.173.26:18437` (см. `config/api.json`).
 | Проблема | Решение |
 |----------|---------|
 | `no solution file was found` | `MagicBall.sln` в корне (уже есть) |
+| `MSB4126 ... Release\|Any CPU` | В `MagicBall.sln` должен быть `Release` → `ExportRelease` (алиас) |
 | Нет Yandex AAR | Скачивает `addons/GodotAndroidYandexAds/bin/*.aar` |
 | `SDK location not found` | Создаёт `android/build/local.properties` |
 | `compileSdk = 36` warning | `android.suppressUnsupportedCompileSdk=36` |
