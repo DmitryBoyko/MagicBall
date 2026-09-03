@@ -35,6 +35,7 @@ public partial class MainScene : Control
     private OracleStep _step = OracleStep.Ask;
     private bool _askSettling;
     private Tween? _askSettleTween;
+    private float _askBottomY;
     private const float SunFadeSeconds = 1.15f;
 
     private enum OracleStep
@@ -93,10 +94,10 @@ public partial class MainScene : Control
         if (_uiPad == null)
             return;
         SafeAreaHelper.Apply(_uiPad, this);
-        _sheet?.ApplySafeArea();
         _modal?.ApplySafeArea();
         _ads?.ApplySafeArea();
         LayoutBall();
+        LayoutReadingSheet();
     }
 
     private void BuildTree()
@@ -297,9 +298,48 @@ public partial class MainScene : Control
         if (_ask == null)
             return;
 
-        _ask.Text = _step == OracleStep.Answer ? "Ответ" : "Спросить";
-        _ask.Visible = _introFinished && _step != OracleStep.Busy;
-        _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling;
+        _ask.Text = "Спросить";
+        var sheetOpen = _sheet is { Visible: true };
+        _ask.Visible = _introFinished && !sheetOpen;
+        _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling || sheetOpen;
+        CacheAskBottom();
+    }
+
+    private void CacheAskBottom()
+    {
+        if (_ask == null || !_ask.IsVisibleInTree() || _ask.Size.Y < 8f)
+            return;
+        _askBottomY = _ask.GetGlobalRect().End.Y;
+    }
+
+    private void LayoutReadingSheet()
+    {
+        if (_sheet is not { Visible: true })
+            return;
+        CacheAskBottom();
+        _sheet.LayoutReadingBand(ComputeReadingBand());
+    }
+
+    private Rect2 ComputeReadingBand()
+    {
+        const float gapToBall = 50f;
+        const float widthFrac = 0.92f;
+        var ballBottom = _ballTarget.Y + _ball.Size.Y;
+        var top = ballBottom + gapToBall;
+        var bottom = _askBottomY;
+        if (bottom < 8f && _ask != null && _ask.IsVisibleInTree())
+            bottom = _ask.GetGlobalRect().End.Y;
+        if (bottom < 8f)
+        {
+            var vp = GetViewportRect().Size.Y;
+            bottom = vp - 80f;
+        }
+
+        var height = Mathf.Max(160f, bottom - top);
+        var safe = SafeAreaHelper.GetSafeRect(this);
+        var width = Mathf.Max(280f, safe.Size.X * widthFrac);
+        var left = safe.Position.X + (safe.Size.X - width) * 0.5f;
+        return new Rect2(left, top, width, height);
     }
 
     private void PlaceBallCluster(Vector2 ballPos)
@@ -378,13 +418,6 @@ public partial class MainScene : Control
         if (!_introFinished || _step == OracleStep.Busy || _askSettling)
             return;
 
-        if (_step == OracleStep.Answer)
-        {
-            if (_lastResult != null)
-                _sheet.Present(_lastResult);
-            return;
-        }
-
         if (ProfileStore.Current is not { IsComplete: true } profile)
         {
             _modal.Present(editMode: false);
@@ -439,8 +472,12 @@ public partial class MainScene : Control
 
         SetBallLook(BallLook.Idle);
         SetSunActive(true);
+        CacheAskBottom();
+        _sheet.Present(result);
         _step = OracleStep.Answer;
+        LayoutReadingSheet();
         RefreshActionButton();
+        CallDeferred(MethodName.LayoutReadingSheet);
     }
 
     private void ShowFog()
@@ -448,9 +485,12 @@ public partial class MainScene : Control
         SetSunActive(false);
         SetBallLook(BallLook.Fog);
         _sparks.SetAsking(false);
-        _step = OracleStep.Ask;
-        RefreshActionButton();
+        CacheAskBottom();
         _sheet.PresentFog();
+        _step = OracleStep.Ask;
+        LayoutReadingSheet();
+        RefreshActionButton();
+        CallDeferred(MethodName.LayoutReadingSheet);
     }
 
     private void SetSunActive(bool on) => _sun?.SetActive(on);
@@ -536,7 +576,10 @@ public partial class MainScene : Control
         if (_uiPad != null)
             _uiPad.Visible = !capturing;
         if (!capturing)
+        {
             RefreshActionButton();
+            LayoutReadingSheet();
+        }
     }
 
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)

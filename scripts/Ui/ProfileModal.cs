@@ -32,6 +32,7 @@ public partial class ProfileModal : CanvasLayer
     private DatePart _picking;
     private TilePickerModal _picker = null!;
     private CyberpunkLabeledSwitch? _music;
+    private CyberpunkLabeledSwitch? _birds;
     private OptionButton? _background;
     private Button _save = null!;
     private Button? _close;
@@ -124,6 +125,10 @@ public partial class ProfileModal : CanvasLayer
             _music.Toggled += OnMusicToggled;
             box.AddChild(_music);
 
+            _birds = CyberpunkLabeledSwitch.Create("Птицы", UiTheme.Cyan, UiTheme.FontModalButton);
+            _birds.Toggled += OnBirdsToggled;
+            box.AddChild(_birds);
+
             if (DevToggles.ShowBackgroundPresetInSettings)
             {
                 box.AddChild(UiTheme.MakeLabel("Фон экрана", UiTheme.FontModalBody, UiTheme.Cyan, HorizontalAlignment.Left));
@@ -183,6 +188,7 @@ public partial class ProfileModal : CanvasLayer
         RefreshDateButtons();
 
         _music?.SetPressedNoSignal(AppSettingsStore.Current.MusicEnabled);
+        _birds?.SetPressedNoSignal(AppSettingsStore.Current.BirdsEnabled);
         if (_background != null)
         {
             _background.Selected = AppSettingsStore.Current.BackgroundPreset switch
@@ -229,11 +235,13 @@ public partial class ProfileModal : CanvasLayer
         };
         ProfileStore.Save(profile);
 
-        if (_music != null || _background != null)
+        if (_music != null || _birds != null || _background != null)
         {
             var settings = AppSettingsStore.Current;
             if (_music != null)
                 settings.MusicEnabled = _music.ButtonPressed;
+            if (_birds != null)
+                settings.BirdsEnabled = _birds.ButtonPressed;
             if (_background != null)
             {
                 settings.BackgroundPreset = _background.Selected switch
@@ -247,7 +255,9 @@ public partial class ProfileModal : CanvasLayer
             }
 
             AppSettingsStore.Save(settings);
-            GetNodeOrNull<AudioService>("/root/AudioService")?.SetEnabled(settings.MusicEnabled);
+            var audio = GetNodeOrNull<AudioService>("/root/AudioService");
+            audio?.SetEnabled(settings.MusicEnabled);
+            audio?.SetBirdsEnabled(settings.BirdsEnabled);
         }
 
         Visible = false;
@@ -257,6 +267,11 @@ public partial class ProfileModal : CanvasLayer
     private void OnMusicToggled(bool enabled)
     {
         GetNodeOrNull<AudioService>("/root/AudioService")?.SetEnabled(enabled);
+    }
+
+    private void OnBirdsToggled(bool enabled)
+    {
+        GetNodeOrNull<AudioService>("/root/AudioService")?.SetBirdsEnabled(enabled);
     }
 
     private void OpenDayPicker()

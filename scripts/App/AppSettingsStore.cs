@@ -6,6 +6,7 @@ namespace CrystalBall.App;
 public sealed class AppSettings
 {
     public bool MusicEnabled { get; set; } = true;
+    public bool BirdsEnabled { get; set; } = true;
     public string BackgroundPreset { get; set; } = "auto";
 }
 
@@ -65,10 +66,13 @@ public static class AppSettingsStore
             using var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.TryGetProperty("MusicEnabled", out _))
                 Current.MusicEnabled = true;
+            if (!doc.RootElement.TryGetProperty("BirdsEnabled", out _))
+                Current.BirdsEnabled = true;
         }
         catch (Exception)
         {
             Current.MusicEnabled = true;
+            Current.BirdsEnabled = true;
         }
     }
 }

@@ -102,10 +102,7 @@ public partial class AudioService : Node
         if (!enabled)
         {
             _music.Stop();
-            _birds?.Stop();
             _silence = 0;
-            _birdBurstLeft = 0;
-            _birdGap = 2.0;
             if (!_vortexActive)
                 _mixTween?.Kill();
             return;
@@ -144,6 +141,32 @@ public partial class AudioService : Node
         Apply(enabled);
     }
 
+    public void SetBirdsEnabled(bool enabled)
+    {
+        var settings = AppSettingsStore.Current;
+        settings.BirdsEnabled = enabled;
+        AppSettingsStore.Save(settings);
+        ApplyBirds(enabled);
+    }
+
+    public void ApplyBirds(bool enabled)
+    {
+        if (_birds == null)
+            return;
+
+        if (!enabled)
+        {
+            _birds.Stop();
+            _birdBurstLeft = 0;
+            _birdGap = 2.0;
+            return;
+        }
+
+        ApplyAmbientVolumes(immediate: true);
+        if (_birdGap <= 0)
+            _birdGap = 1.5 + Random.Shared.NextDouble() * 2.5;
+    }
+
     private float CurrentMusicDb => _vortexActive ? MusicDuckedDb : MusicVolumeDb;
     private float CurrentBirdsDb => _vortexActive ? BirdsDuckedDb : BirdsVolumeDb;
 
@@ -165,7 +188,7 @@ public partial class AudioService : Node
         _mixTween.SetParallel(true);
         if (_music != null && AppSettingsStore.Current.MusicEnabled)
             _mixTween.TweenProperty(_music, "volume_db", CurrentMusicDb, seconds);
-        if (_birds != null)
+        if (_birds != null && AppSettingsStore.Current.BirdsEnabled)
             _mixTween.TweenProperty(_birds, "volume_db", CurrentBirdsDb, seconds);
     }
 
@@ -279,7 +302,7 @@ public partial class AudioService : Node
 
     private void TickBirds(double delta)
     {
-        if (_birds == null || !AppSettingsStore.Current.MusicEnabled || _birdClips.Count == 0)
+        if (_birds == null || !AppSettingsStore.Current.BirdsEnabled || _birdClips.Count == 0)
             return;
 
         if (_birds.Playing)

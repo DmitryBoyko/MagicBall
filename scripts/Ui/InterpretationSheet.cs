@@ -9,14 +9,11 @@ public partial class InterpretationSheet : CanvasLayer
     public event Action? Closed;
     public event Action<bool>? CaptureChrome;
 
-    private const float PanelWidthFrac = 0.92f;
-    private const float PanelHeightFrac = 0.5f;
     private const float PanelBgAlpha = 0.78f;
 
     private Label _body = null!;
     private Label _summary = null!;
     private Label _shareHint = null!;
-    private MarginContainer _margin = null!;
     private PanelContainer _panel = null!;
     private ScrollContainer _scroll = null!;
     private Button _share = null!;
@@ -28,27 +25,21 @@ public partial class InterpretationSheet : CanvasLayer
         Layer = 28;
         Visible = false;
 
-        var dim = new ColorRect { Color = new Color(0f, 0f, 0f, 0.55f) };
-        dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        dim.GuiInput += OnDimInput;
-        AddChild(dim);
+        var host = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        host.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(host);
 
-        _margin = new MarginContainer();
-        _margin.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        AddChild(_margin);
-
-        var center = new CenterContainer();
-        center.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        _margin.AddChild(center);
-
-        _panel = new PanelContainer();
-        center.AddChild(_panel);
+        _panel = new PanelContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        host.AddChild(_panel);
 
         var pad = CyberFrameBorder.CreateContentPad();
         _panel.AddChild(pad);
 
         var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 16);
+        box.AddThemeConstantOverride("separation", 12);
         box.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         box.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         pad.AddChild(box);
@@ -101,43 +92,38 @@ public partial class InterpretationSheet : CanvasLayer
         buttons.AddChild(_close);
 
         CyberFrameBorder.SetupModal(_panel, PanelBgAlpha);
-        ApplySafeArea();
     }
 
-    public void ApplySafeArea()
+    public void LayoutReadingBand(Rect2 band)
     {
-        if (_margin == null || _panel == null)
+        if (_panel == null || band.Size.X < 8f || band.Size.Y < 8f)
             return;
-        SafeAreaHelper.Apply(_margin, this);
-        var safe = SafeAreaHelper.GetSafeRect(this);
-        _panel.CustomMinimumSize = new Vector2(
-            Mathf.Max(280f, safe.Size.X * PanelWidthFrac),
-            Mathf.Max(240f, safe.Size.Y * PanelHeightFrac));
+        _panel.Position = band.Position;
+        _panel.Size = band.Size;
+        _panel.CustomMinimumSize = band.Size;
     }
 
     public void Present(OracleResult result)
     {
-        ApplySafeArea();
         _body.Text = SummaryExtractor.StripMarkup(result.Interpretation);
         _summary.Text = SummaryExtractor.StripMarkup(result.Summary);
-        _scroll.ScrollVertical = 0;
-        _shareHint.Text = "";
-        _sharing = false;
-        SetShareBusy(false);
-        _share.Visible = true;
-        Visible = true;
+        ShowSheet(share: true);
     }
 
     public void PresentFog()
     {
-        ApplySafeArea();
         _body.Text = "Туман судьбы неразличим.";
         _summary.Text = string.Empty;
+        ShowSheet(share: false);
+    }
+
+    private void ShowSheet(bool share)
+    {
         _scroll.ScrollVertical = 0;
         _shareHint.Text = "";
         _sharing = false;
         SetShareBusy(false);
-        _share.Visible = false;
+        _share.Visible = share;
         Visible = true;
     }
 
@@ -211,25 +197,5 @@ public partial class InterpretationSheet : CanvasLayer
             return;
         Visible = false;
         Closed?.Invoke();
-    }
-
-    private void OnDimInput(InputEvent @event)
-    {
-        if (_sharing)
-            return;
-
-        if (@event is InputEventScreenTouch touch && touch.Pressed)
-        {
-            Dismiss();
-            return;
-        }
-
-        if (@event is InputEventMouseButton mouse
-            && mouse.Pressed
-            && mouse.ButtonIndex == MouseButton.Left
-            && !DisplayServer.IsTouchscreenAvailable())
-        {
-            Dismiss();
-        }
     }
 }
