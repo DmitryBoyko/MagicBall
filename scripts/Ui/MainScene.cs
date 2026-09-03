@@ -25,6 +25,7 @@ public partial class MainScene : Control
     private MarginContainer _uiPad = null!;
     private Button _ask = null!;
     private Label _askHint = null!;
+    private Control _askHintGap = null!;
     private Button _otherApps = null!;
     private SettingsGearButton _gear = null!;
     private ProfileModal _modal = null!;
@@ -160,7 +161,7 @@ public partial class MainScene : Control
         _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.78f));
         _askHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _askHint.MouseFilter = MouseFilterEnum.Ignore;
-        _askHint.MaxLines = 2;
+        _askHint.MaxLinesVisible = 2;
         _askHint.Visible = false;
         var hintRng = new RandomNumberGenerator();
         hintRng.Randomize();
@@ -172,8 +173,15 @@ public partial class MainScene : Control
         _ask.Pressed += OnActionPressed;
 
         var askBlock = new VBoxContainer();
-        askBlock.AddThemeConstantOverride("separation", 8);
+        askBlock.AddThemeConstantOverride("separation", 0);
+        _askHintGap = new Control
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            CustomMinimumSize = new Vector2(0, 200),
+            Visible = false,
+        };
         askBlock.AddChild(_askHint);
+        askBlock.AddChild(_askHintGap);
         askBlock.AddChild(_ask);
         bottom.AddChild(askBlock);
 
@@ -323,6 +331,8 @@ public partial class MainScene : Control
         _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling || sheetOpen;
         if (_askHint != null)
             _askHint.Visible = _ask.Visible && _step == OracleStep.Ask;
+        if (_askHintGap != null)
+            _askHintGap.Visible = _ask.Visible;
         CacheAskBottom();
     }
 

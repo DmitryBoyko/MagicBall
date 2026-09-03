@@ -60,9 +60,11 @@ public partial class VortexField : CanvasLayer
 
     public bool IsActive => _playing;
 
+    public const int CanvasLayerIndex = 26;
+
     public override void _Ready()
     {
-        Layer = 24;
+        Layer = CanvasLayerIndex;
         Visible = false;
         SetProcess(false);
         _rng.Randomize();

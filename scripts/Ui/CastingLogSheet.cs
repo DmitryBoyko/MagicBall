@@ -4,37 +4,59 @@ using Godot;
 namespace CrystalBall.Ui;
 
 /// <summary>
-/// Ритуальный лог сборки промпта в полосе модалки ответа: построчный fade-in и мягкий скролл вверх.
+/// Ритуальный лог сборки промпта: построчный fade-in без модалки и рамки.
+/// Лёгкое затемнение под текстом; вихрь рисуется слоем выше.
 /// </summary>
 public partial class CastingLogSheet : CanvasLayer
 {
-    private const float PanelBgAlpha = 0.78f;
+    private const float DimAlpha = 0.32f;
     private const float LineFadeIn = 0.35f;
     private const float TopFadeOut = 0.55f;
     private const int MaxVisibleLines = 8;
+    private const int TextPadPx = 20;
 
-    private PanelContainer _panel = null!;
+    /// <summary>Ниже <see cref="VortexField"/>, чтобы частицы шли поверх фраз.</summary>
+    public const int CanvasLayerIndex = 23;
+
+    private Control _band = null!;
     private ScrollContainer _scroll = null!;
     private VBoxContainer _lines = null!;
     private readonly List<Label> _labels = [];
 
     public override void _Ready()
     {
-        Layer = 27;
+        Layer = CanvasLayerIndex;
         Visible = false;
 
         var host = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         host.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(host);
 
-        _panel = new PanelContainer
+        var dim = new ColorRect
+        {
+            Color = new Color(UiTheme.Ink.R, UiTheme.Ink.G, UiTheme.Ink.B, DimAlpha),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        dim.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        host.AddChild(dim);
+
+        _band = new MarginContainer
         {
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        host.AddChild(_panel);
+        host.AddChild(_band);
 
-        var pad = CyberFrameBorder.CreateContentPad();
-        _panel.AddChild(pad);
+        var pad = new MarginContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        pad.AddThemeConstantOverride("margin_left", TextPadPx);
+        pad.AddThemeConstantOverride("margin_top", TextPadPx);
+        pad.AddThemeConstantOverride("margin_right", TextPadPx);
+        pad.AddThemeConstantOverride("margin_bottom", TextPadPx);
+        _band.AddChild(pad);
 
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 12);
@@ -60,17 +82,15 @@ public partial class CastingLogSheet : CanvasLayer
         };
         _lines.AddThemeConstantOverride("separation", 10);
         _scroll.AddChild(_lines);
-
-        CyberFrameBorder.SetupModal(_panel, PanelBgAlpha);
     }
 
     public void LayoutBand(Rect2 band)
     {
-        if (_panel == null || band.Size.X < 8f || band.Size.Y < 8f)
+        if (_band == null || band.Size.X < 8f || band.Size.Y < 8f)
             return;
-        _panel.Position = band.Position;
-        _panel.Size = band.Size;
-        _panel.CustomMinimumSize = band.Size;
+        _band.Position = band.Position;
+        _band.Size = band.Size;
+        _band.CustomMinimumSize = band.Size;
     }
 
     public void Begin()
