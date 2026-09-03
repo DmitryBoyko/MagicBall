@@ -8,7 +8,7 @@
 Ui (MainScene)
  ├─ ProfileModal / InterpretationSheet / AdOverlay / VortexField
  ├─ ContextManager          ← имя, зодиак, батарея, якоря, фото-тег
- ├─ Vision                  ← ImagePreprocessor → OnnxInferenceEngine → InferenceWorker
+ ├─ Vision                  ← ImagePreprocessor → PhotoSampler → OnnxInferenceEngine → InferenceWorker
  └─ AiGateway               ← FIFO 5с → GigaChatClient → extract_summary
                                  ↓ сбой / очередь полна
                             SemanticCache (порог 0.82) → MeaningBank.synthesize (156)
@@ -22,7 +22,7 @@ Ui (MainScene)
 | `ContextManager` | Склейка детерминированных + динамических + хаос-модификаторов |
 | `ImagePreprocessor` | Последнее фото / тест → 224×224 RGB8 ImageNet NCHW (150528 float) |
 | `OnnxInferenceEngine` | Синглтон `InferenceSession`, NNAPI→CPU, защита от `DllNotFoundException` |
-| `InferenceWorker` | `Task.Run` во время рекламы, ArgMax, без Godot API из фона |
+| `PhotoSampler` | Последние 3–10 фото по одному → сводка архетипа/палитры/света |
 | `MysticTagConverter` | ImageNet → русский архетип |
 | `OracleProxyClient` | `POST /api/v1/oracle` — ключ Sber только на сервере |
 | `AiGateway` | прокси → локальный synthesize, `osiris_present` |
@@ -32,7 +32,7 @@ Ui (MainScene)
 ## Поток гадания
 
 1. Тап «Спросить Оракула» блокирует кнопку.
-2. Полноэкранная реклама (симуляция). Параллельно: предобработка фото на главном потоке → `InferenceWorker.RunInferenceAsync`.
+2. Полноэкранный вихрь. Параллельно: последние N фото по одному (декод на главном потоке, MobileNet в фоне) → одна сводка в контекст.
 3. Шар входит в вихрь. HTTP к GigaChat ставится в FIFO.
 4. Удержание вихря не короче 2.4 с, даже если ответ уже пришёл.
 5. Спад 0.95 с → кнопка «Открыть толкование».

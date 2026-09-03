@@ -1,5 +1,6 @@
 {
   "vortex_seconds": 4.0,
+  "photo_lookback_count": 4,
   "use_proxy": true,
   "proxy_base_url": "http://127.0.0.1:17879",
   "android_base_url": "http://YOUR_VPS_IP:17879",

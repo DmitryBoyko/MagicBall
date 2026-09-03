@@ -15,11 +15,50 @@ public sealed class ImagePreprocessor
     private static readonly float[] ImageNetMean = [0.485f, 0.456f, 0.406f];
     private static readonly float[] ImageNetStd = [0.229f, 0.224f, 0.225f];
 
+    public Image LoadFallbackImage() =>
+        TryLoadTestTexture() ?? CreateFallbackImage();
+
     public Image LoadSourceImage()
     {
-        return TryLoadLatestGalleryImage()
-               ?? TryLoadTestTexture()
-               ?? CreateFallbackImage();
+        var paths = ListLatestGalleryPaths(1);
+        if (paths.Count > 0)
+        {
+            var loaded = TryLoadFile(paths[0]);
+            if (loaded != null)
+                return loaded;
+        }
+
+        return LoadFallbackImage();
+    }
+
+    public Image? TryLoadFile(string path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || !FileAccess.FileExists(path))
+                return null;
+            var image = new Image();
+            return image.Load(path) == Error.Ok ? image : null;
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[ImagePreprocessor] {path}: {ex.Message}");
+            return null;
+        }
+    }
+
+    public List<string> ListLatestGalleryPaths(int take)
+    {
+        take = Math.Clamp(take, 1, AppConfig.MaxPhotoLookback);
+        var found = new List<(string Path, ulong Time)>();
+        CollectImages(OS.GetSystemDir(OS.SystemDir.Dcim), 0, found);
+        CollectImages(OS.GetSystemDir(OS.SystemDir.Pictures), 0, found);
+        return found
+            .DistinctBy(row => row.Path, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(row => row.Time)
+            .Take(take)
+            .Select(row => row.Path)
+            .ToList();
     }
 
     public float[] ToNchwTensor(Image source)
@@ -57,68 +96,113 @@ public sealed class ImagePreprocessor
 
     public PhotoAnalysis Describe(Image source, string rawTag, string mysticTag)
     {
+        var (palette, luminance) = SampleVisuals(source);
         return new PhotoAnalysis
         {
             RawTag = rawTag,
             MysticTag = mysticTag,
-            ColorPalette = ExtractPalette(source),
-            LuminanceVibe = ExtractLuminance(source),
+            ColorPalette = FormatPalette(palette),
+            LuminanceVibe = FormatLuminance(luminance),
+        };
+    }
+
+    public (Dictionary<string, int> Palette, double Luminance) SampleVisuals(Image source)
+    {
+        using var work = new Image();
+        work.CopyFrom(source);
+        work.Resize(32, 32, Image.Interpolation.Nearest);
+        var buckets = new Dictionary<string, int>();
+        double sum = 0;
+        var count = work.GetWidth() * work.GetHeight();
+        for (var y = 0; y < work.GetHeight(); y++)
+        {
+            for (var x = 0; x < work.GetWidth(); x++)
+            {
+                var pixel = work.GetPixel(x, y);
+                var name = NameColor(pixel);
+                buckets[name] = buckets.GetValueOrDefault(name) + 1;
+                sum += pixel.Luminance;
+            }
+        }
+
+        return (buckets, sum / Math.Max(count, 1));
+    }
+
+    public static PhotoAnalysis Merge(IReadOnlyList<PhotoFrame> frames)
+    {
+        if (frames.Count == 0)
+            return new PhotoAnalysis
+            {
+                RawTag = "unknown object",
+                MysticTag = MysticTagConverter.UnknownArchetype,
+                ColorPalette = "глубокий черный",
+                LuminanceVibe = FormatLuminance(0),
+            };
+
+        var palette = new Dictionary<string, int>();
+        double lum = 0;
+        foreach (var frame in frames)
+        {
+            lum += frame.Luminance;
+            foreach (var (name, votes) in frame.Palette)
+                palette[name] = palette.GetValueOrDefault(name) + votes;
+        }
+
+        return new PhotoAnalysis
+        {
+            RawTag = VoteNewestWins(frames.Select(f => f.RawTag)),
+            MysticTag = VoteNewestWins(frames.Select(f => f.MysticTag)),
+            ColorPalette = FormatPalette(palette),
+            LuminanceVibe = FormatLuminance(lum / frames.Count),
         };
     }
 
     public Image? TryLoadLatestGalleryImage()
     {
-        try
-        {
-            var pictures = OS.GetSystemDir(OS.SystemDir.Dcim);
-            var found = FindLatestImage(pictures) ?? FindLatestImage(OS.GetSystemDir(OS.SystemDir.Pictures));
-            if (string.IsNullOrEmpty(found) || !FileAccess.FileExists(found))
-                return null;
-
-            var image = new Image();
-            var err = image.Load(found);
-            return err == Error.Ok ? image : null;
-        }
-        catch (Exception ex)
-        {
-            GD.PushWarning($"[ImagePreprocessor] Галерея недоступна: {ex.Message}");
-            return null;
-        }
+        var paths = ListLatestGalleryPaths(1);
+        return paths.Count == 0 ? null : TryLoadFile(paths[0]);
     }
 
-    private static string? FindLatestImage(string directory)
+    private static void CollectImages(string directory, int depth, List<(string Path, ulong Time)> into)
     {
-        if (string.IsNullOrEmpty(directory) || !DirAccess.DirExistsAbsolute(directory))
-            return null;
+        const int maxDepth = 2;
+        if (string.IsNullOrEmpty(directory) || depth > maxDepth || !DirAccess.DirExistsAbsolute(directory))
+            return;
 
         using var dir = DirAccess.Open(directory);
         if (dir == null)
-            return null;
+            return;
 
-        string? latest = null;
-        ulong latestUnix = 0;
         dir.ListDirBegin();
         while (true)
         {
             var name = dir.GetNext();
             if (string.IsNullOrEmpty(name))
                 break;
-            if (dir.CurrentIsDir())
-                continue;
-            if (!IsImageName(name))
+            if (name is "." or "..")
                 continue;
 
             var full = directory.TrimEnd('/', '\\') + "/" + name;
-            var modified = FileAccess.GetModifiedTime(full);
-            if (modified >= latestUnix)
+            if (dir.CurrentIsDir())
             {
-                latestUnix = modified;
-                latest = full;
+                if (IsSkippedDir(name))
+                    continue;
+                CollectImages(full, depth + 1, into);
+                continue;
             }
+
+            if (!IsImageName(name))
+                continue;
+            into.Add((full, FileAccess.GetModifiedTime(full)));
         }
 
         dir.ListDirEnd();
-        return latest;
+    }
+
+    private static bool IsSkippedDir(string name)
+    {
+        var lower = name.ToLowerInvariant();
+        return lower is ".thumbnails" or "thumbnails" or ".trashed" or "cache" or "android";
     }
 
     private static bool IsImageName(string name)
@@ -151,42 +235,39 @@ public sealed class ImagePreprocessor
         return image;
     }
 
-    private static string ExtractPalette(Image source)
+    private static string FormatPalette(Dictionary<string, int> buckets)
     {
-        using var work = new Image();
-        work.CopyFrom(source);
-        work.Resize(32, 32, Image.Interpolation.Nearest);
-        var buckets = new Dictionary<string, int>();
-        for (var y = 0; y < work.GetHeight(); y++)
-        {
-            for (var x = 0; x < work.GetWidth(); x++)
-            {
-                var name = NameColor(work.GetPixel(x, y));
-                buckets[name] = buckets.GetValueOrDefault(name) + 1;
-            }
-        }
-
         var top = buckets.OrderByDescending(pair => pair.Value).Take(3).Select(pair => pair.Key);
         return string.Join(", ", top);
     }
 
-    private static string ExtractLuminance(Image source)
-    {
-        using var work = new Image();
-        work.CopyFrom(source);
-        work.Resize(32, 32, Image.Interpolation.Nearest);
-        double sum = 0;
-        var count = work.GetWidth() * work.GetHeight();
-        for (var y = 0; y < work.GetHeight(); y++)
-        {
-            for (var x = 0; x < work.GetWidth(); x++)
-                sum += work.GetPixel(x, y).Luminance;
-        }
-
-        var mean = sum / Math.Max(count, 1);
-        return mean >= 0.45
+    public static string FormatLuminance(double mean) =>
+        mean >= 0.45
             ? "Яркий свет (ясность мотивов)"
             : "Глубокий сумрак (скрытые тайны)";
+
+    private static string VoteNewestWins(IEnumerable<string> values)
+    {
+        var list = values.Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+        if (list.Count == 0)
+            return string.Empty;
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var value in list)
+            counts[value] = counts.GetValueOrDefault(value) + 1;
+
+        var best = 0;
+        var winner = list[0];
+        foreach (var value in list)
+        {
+            var n = counts[value];
+            if (n <= best)
+                continue;
+            best = n;
+            winner = value;
+        }
+
+        return winner;
     }
 
     private static string NameColor(Color color)

@@ -16,6 +16,9 @@ public sealed class AppConfig
     public const int VortexParticleCount = 2600;
     public const int TensorLength = 150528;
     public const int ImageSize = 224;
+    public const int DefaultPhotoLookback = 4;
+    public const int MinPhotoLookback = 3;
+    public const int MaxPhotoLookback = 10;
 
     [JsonPropertyName("gigachat_oauth_url")]
     public string GigaChatOauthUrl { get; set; } = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth";
@@ -71,6 +74,9 @@ public sealed class AppConfig
     [JsonPropertyName("vortex_seconds")]
     public float VortexSeconds { get; set; } = DefaultVortexSeconds;
 
+    [JsonPropertyName("photo_lookback_count")]
+    public int PhotoLookbackCount { get; set; } = DefaultPhotoLookback;
+
     [JsonPropertyName("use_proxy")]
     public bool UseProxy { get; set; } = true;
 
@@ -89,6 +95,8 @@ public sealed class AppConfig
         Current = loaded;
         if (Current.VortexSeconds < 0.5f)
             Current.VortexSeconds = DefaultVortexSeconds;
+        Current.PhotoLookbackCount = Math.Clamp(
+            Current.PhotoLookbackCount, MinPhotoLookback, MaxPhotoLookback);
         return Current;
     }
 

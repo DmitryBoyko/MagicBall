@@ -584,29 +584,10 @@ public partial class MainScene : Control
 
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)
     {
-        var photo = await AnalyzePhotoAsync();
+        var photo = await PhotoSampler.AnalyzeRecentAsync();
         var context = await _context.AssembleAsync(profile, photo);
         var gateway = GameRoot.Instance?.Gateway ?? new AiGateway(AppConfig.Current);
         return await gateway.InterpretAsync(context);
-    }
-
-    private async Task<PhotoAnalysis> AnalyzePhotoAsync()
-    {
-        var preprocessor = new ImagePreprocessor();
-        var image = preprocessor.LoadSourceImage();
-        var tensor = preprocessor.ToNchwTensor(image);
-        var engine = OnnxInferenceEngine.Instance;
-        if (engine == null)
-        {
-            return preprocessor.Describe(image, "unknown object", MysticTagConverter.Convert("unknown object"));
-        }
-
-        if (!engine.IsInitialized)
-            await engine.InitializeEngineAsync();
-
-        var worker = new InferenceWorker(engine);
-        var outcome = await worker.RunDetailedAsync(tensor);
-        return preprocessor.Describe(image, outcome.EnglishTag, outcome.MysticTag);
     }
 
     private void OnOtherApps()
