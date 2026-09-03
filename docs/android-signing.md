@@ -1,5 +1,7 @@
 # Android: подпись APK
 
+Полный гайд экспорта (Gradle, JDK, Yandex AAR): **[`docs/android-export.md`](android-export.md)**.
+
 По шаблону `MagicCubes`: один ключ на **debug и release**.
 
 ## Keystore

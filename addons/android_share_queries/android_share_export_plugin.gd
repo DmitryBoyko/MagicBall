@@ -11,6 +11,12 @@ func _supports_platform(platform: EditorExportPlatform) -> bool:
 	return platform.get_name() == "Android"
 
 
+func _get_android_manifest_application_element_contents(platform: EditorExportPlatform, _debug: bool) -> String:
+	if platform.get_name() != "Android":
+		return ""
+	return 'android:usesCleartextTraffic="true"\n'
+
+
 func _get_android_manifest_element_contents(platform: EditorExportPlatform, _debug: bool) -> String:
 	if platform.get_name() != "Android":
 		return ""
