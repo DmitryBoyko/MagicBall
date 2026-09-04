@@ -67,12 +67,19 @@ public partial class GameRoot : Node
 
     private async void WarmupDeferred()
     {
+        // Дать MainScene отрисовать 2 кадра до тяжёлого ONNX (иначе «чёрный экран»).
+        var tree = GetTree();
+        if (tree != null)
+        {
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        }
+
         var engine = OnnxInferenceEngine.Instance;
         if (engine != null)
             await engine.InitializeEngineAsync();
         EngineReady = true;
 
-        // После ONNX — один кадр в фоне, остальное доберёт «Спросить».
         await PhotoSampler.WarmupAsync(1);
     }
 

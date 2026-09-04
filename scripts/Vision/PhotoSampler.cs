@@ -111,7 +111,7 @@ public static class PhotoSampler
     private static async Task<PhotoAnalysis> AnalyzePathsAsync(int take)
     {
         var preprocessor = new ImagePreprocessor();
-        var paths = preprocessor.ListLatestGalleryPaths(take);
+        var paths = await preprocessor.ListLatestGalleryPathsAsync(take).ConfigureAwait(true);
         await YieldFrameAsync().ConfigureAwait(true);
 
         var engine = OnnxInferenceEngine.Instance;
@@ -131,6 +131,8 @@ public static class PhotoSampler
                 continue;
             }
 
+            // Decode/resize — после yield, чтобы фразы ритуала не залипали.
+            await YieldFrameAsync().ConfigureAwait(true);
             var prepared = preprocessor.TryPrepareFrame(path);
             if (prepared == null)
                 continue;

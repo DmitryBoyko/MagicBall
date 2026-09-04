@@ -58,13 +58,14 @@ public partial class OnnxInferenceEngine : Node
 
     private async Task InitializeEngineCoreAsync()
     {
-        await _initLock.WaitAsync();
+        await _initLock.WaitAsync().ConfigureAwait(true);
         try
         {
             if (IsInitialized && _session != null)
                 return;
 
             LastError = null;
+            // FileAccess — на main; тяжёлый InferenceSession — в фоне.
             var osPath = EnsureModelOnDisk();
             if (string.IsNullOrEmpty(osPath))
             {
@@ -76,10 +77,35 @@ public partial class OnnxInferenceEngine : Node
 
             try
             {
-                _sessionOptions = CreateSessionOptions();
-                _session = new InferenceSession(osPath, _sessionOptions);
-                CacheIoNames(_session);
-                await Task.Run(() => WarmupGraph(_session)).ConfigureAwait(true);
+                var options = CreateSessionOptions();
+                var provider = ExecutionProvider;
+                var built = await Task.Run(() =>
+                {
+                    var session = new InferenceSession(osPath, options);
+                    string input = "data";
+                    string output = "mobilenetv20_output_flatten0_reshape0";
+                    try
+                    {
+                        using var enIn = session.InputMetadata.Keys.GetEnumerator();
+                        if (enIn.MoveNext())
+                            input = enIn.Current;
+                        using var enOut = session.OutputMetadata.Keys.GetEnumerator();
+                        if (enOut.MoveNext())
+                            output = enOut.Current;
+                    }
+                    catch
+                    {
+                        // keep defaults
+                    }
+
+                    WarmupGraph(session);
+                    return (session, input, output, provider);
+                }).ConfigureAwait(true);
+
+                _session = built.session;
+                _sessionOptions = options;
+                _inputName = built.input;
+                _outputName = built.output;
                 IsInitialized = true;
                 GD.Print($"[OnnxInferenceEngine] Сессия готова. Провайдер: {ExecutionProvider}. Вход: {_inputName}");
             }

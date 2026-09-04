@@ -15,8 +15,8 @@ public partial class CastingLogSheet : CanvasLayer
     private const int MaxVisibleLines = 8;
     private const int TextPadPx = 20;
 
-    /// <summary>Ниже <see cref="VortexField"/>, чтобы частицы шли поверх фраз.</summary>
-    public const int CanvasLayerIndex = 23;
+    /// <summary>Выше вихря — иначе 2600 частиц полностью закрывают фразы.</summary>
+    public const int CanvasLayerIndex = 28;
 
     private Control _band = null!;
     private ScrollContainer _scroll = null!;

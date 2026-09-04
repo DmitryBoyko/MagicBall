@@ -143,6 +143,15 @@ public partial class MainScene : Control
 
     private void BuildTree()
     {
+        // Сразу не чёрный clear — пока грузится текстура фона.
+        var baseFill = new ColorRect
+        {
+            Color = UiTheme.Ink,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        baseFill.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(baseFill);
+
         _background = new TextureRect
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
@@ -348,7 +357,10 @@ public partial class MainScene : Control
         _introFinished = true;
         ApplyIdlePose();
         RefreshActionButton();
+        CallDeferred(MethodName.PrewarmVortex);
     }
+
+    private void PrewarmVortex() => _vortex?.Prewarm();
 
     private void ApplyIdlePose()
     {
@@ -514,6 +526,7 @@ public partial class MainScene : Control
         SetBallLook(BallLook.Asking);
         _sparks.SetAsking(true);
         BeginCastingRitual();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
         var request = RunOracleAsync(profile);
         try
@@ -694,16 +707,16 @@ public partial class MainScene : Control
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)
     {
         var casting = new CastingProgress(_casting, GetTree());
-
-        // Скан галереи параллельно с ранними стадиями протокола и вортексом.
-        var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
         var geoTask = GeoLocationService.ResolveForAskAsync();
         var weatherTask = WeatherService.ResolveForAskAsync();
 
+        // Сначала фразы ритуала — галерею стартуем после, иначе DirAccess фризит UI.
         await casting.ReportAsync(CastingStage.Name);
         await casting.ReportAsync(CastingStage.Zodiac);
         await casting.ReportAsync(CastingStage.Destiny);
         await casting.ReportAsync(CastingStage.Time);
+
+        var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
 
         await casting.ReportAsync(CastingStage.Geo);
         var geo = await geoTask;

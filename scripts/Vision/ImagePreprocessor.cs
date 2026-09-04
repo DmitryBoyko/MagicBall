@@ -81,8 +81,23 @@ public sealed class ImagePreprocessor
     {
         take = Math.Clamp(take, 1, AppConfig.MaxPhotoLookback);
         var found = new List<(string Path, ulong Time)>();
-        CollectImages(OS.GetSystemDir(OS.SystemDir.Dcim), 0, found);
-        CollectImages(OS.GetSystemDir(OS.SystemDir.Pictures), 0, found);
+        CollectImages(OS.GetSystemDir(OS.SystemDir.Dcim), 0, found, stopAfter: 48);
+        CollectImages(OS.GetSystemDir(OS.SystemDir.Pictures), 0, found, stopAfter: 48);
+        return found
+            .DistinctBy(row => row.Path, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(row => row.Time)
+            .Take(take)
+            .Select(row => row.Path)
+            .ToList();
+    }
+
+    /// <summary>Тот же скан, но с yield каждые N файлов — без фриза UI.</summary>
+    public async Task<List<string>> ListLatestGalleryPathsAsync(int take)
+    {
+        take = Math.Clamp(take, 1, AppConfig.MaxPhotoLookback);
+        var found = new List<(string Path, ulong Time)>();
+        await CollectImagesAsync(OS.GetSystemDir(OS.SystemDir.Dcim), 0, found, stopAfter: 48).ConfigureAwait(true);
+        await CollectImagesAsync(OS.GetSystemDir(OS.SystemDir.Pictures), 0, found, stopAfter: 48).ConfigureAwait(true);
         return found
             .DistinctBy(row => row.Path, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(row => row.Time)
@@ -228,9 +243,11 @@ public sealed class ImagePreprocessor
         return new PreparedFrame(work.GetData(), work.GetWidth(), work.GetHeight());
     }
 
-    private static void CollectImages(string directory, int depth, List<(string Path, ulong Time)> into)
+    private static void CollectImages(string directory, int depth, List<(string Path, ulong Time)> into, int stopAfter = 64)
     {
         const int maxDepth = 2;
+        if (into.Count >= stopAfter)
+            return;
         if (string.IsNullOrEmpty(directory) || depth > maxDepth || !DirAccess.DirExistsAbsolute(directory))
             return;
 
@@ -239,7 +256,7 @@ public sealed class ImagePreprocessor
             return;
 
         dir.ListDirBegin();
-        while (true)
+        while (into.Count < stopAfter)
         {
             var name = dir.GetNext();
             if (string.IsNullOrEmpty(name))
@@ -252,13 +269,55 @@ public sealed class ImagePreprocessor
             {
                 if (IsSkippedDir(name))
                     continue;
-                CollectImages(full, depth + 1, into);
+                CollectImages(full, depth + 1, into, stopAfter);
                 continue;
             }
 
             if (!IsImageName(name))
                 continue;
             into.Add((full, FileAccess.GetModifiedTime(full)));
+        }
+
+        dir.ListDirEnd();
+    }
+
+    private static async Task CollectImagesAsync(
+        string directory, int depth, List<(string Path, ulong Time)> into, int stopAfter = 64)
+    {
+        const int maxDepth = 2;
+        if (into.Count >= stopAfter)
+            return;
+        if (string.IsNullOrEmpty(directory) || depth > maxDepth || !DirAccess.DirExistsAbsolute(directory))
+            return;
+
+        using var dir = DirAccess.Open(directory);
+        if (dir == null)
+            return;
+
+        dir.ListDirBegin();
+        var steps = 0;
+        while (into.Count < stopAfter)
+        {
+            var name = dir.GetNext();
+            if (string.IsNullOrEmpty(name))
+                break;
+            if (name is "." or "..")
+                continue;
+
+            var full = directory.TrimEnd('/', '\\') + "/" + name;
+            if (dir.CurrentIsDir())
+            {
+                if (IsSkippedDir(name))
+                    continue;
+                await CollectImagesAsync(full, depth + 1, into, stopAfter).ConfigureAwait(true);
+                continue;
+            }
+
+            if (!IsImageName(name))
+                continue;
+            into.Add((full, FileAccess.GetModifiedTime(full)));
+            if (++steps % 24 == 0 && Engine.GetMainLoop() is SceneTree tree)
+                await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         }
 
         dir.ListDirEnd();

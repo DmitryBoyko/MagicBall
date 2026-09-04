@@ -26,6 +26,9 @@ public sealed class CastingProgress
         cancellationToken.ThrowIfCancellationRequested();
         _log.AppendLine(CastingStageCatalog.Phrase(stage));
         _lastShownUtc = DateTime.UtcNow;
+        // Один кадр — чтобы строка успела отрисоваться до тяжёлой работы на main.
+        if (_tree != null)
+            await _tree.ToSignal(_tree, SceneTree.SignalName.ProcessFrame);
     }
 
     private async Task EnsurePaceAsync(CancellationToken cancellationToken)

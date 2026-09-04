@@ -41,7 +41,7 @@ public partial class VortexField : CanvasLayer
     private float[] _turbPhase = [];
     private float[] _pxSize = [];
 
-    private MultiMeshInstance2D _mesh = null!;
+    private MultiMeshInstance2D? _mesh;
     private GpuParticles2D? _embers;
     private readonly RandomNumberGenerator _rng = new();
 
@@ -68,6 +68,13 @@ public partial class VortexField : CanvasLayer
         Visible = false;
         SetProcess(false);
         _rng.Randomize();
+        // MultiMesh/частицы — лениво в Begin(), чтобы не тормозить первый кадр старта.
+    }
+
+    private void EnsureMesh()
+    {
+        if (_mesh != null)
+            return;
 
         var quad = new QuadMesh { Size = Vector2.One };
         var multi = new MultiMesh
@@ -99,10 +106,28 @@ public partial class VortexField : CanvasLayer
             _embers.Position = _center;
     }
 
+    /// <summary>Прогрев MultiMesh вне «Спросить», чтобы не фризить ритуал.</summary>
+    public void Prewarm()
+    {
+        EnsureMesh();
+        if (_area.X < 8f || _area.Y < 8f)
+        {
+            var vp = GetViewport()?.GetVisibleRect().Size ?? Vector2.Zero;
+            if (vp.X >= 8f)
+                SyncSize(vp);
+        }
+
+        if (_count <= 0 && _home.Length > 0)
+            FillField(AppConfig.VortexParticleCount);
+    }
+
     public async Task PlayAsync(Task holdUntil, CancellationToken cancellationToken = default)
     {
         var holdSec = Mathf.Max(0.5f, AppConfig.Current.VortexSeconds);
         Begin();
+        // Дать CastingLog отрисоваться до плотного _Process вихря.
+        if (GetTree() is { } tree)
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         try
         {
             await Task.WhenAll(Safe(holdUntil), WaitElapsed(holdSec, cancellationToken));
@@ -213,6 +238,7 @@ public partial class VortexField : CanvasLayer
 
     private void Begin()
     {
+        EnsureMesh();
         var vp = GetViewport()?.GetVisibleRect().Size ?? _area;
         SyncSize(vp);
         FillField(AppConfig.VortexParticleCount);
@@ -357,6 +383,8 @@ public partial class VortexField : CanvasLayer
 
     private void WriteMesh()
     {
+        if (_mesh?.Multimesh == null)
+            return;
         var multi = _mesh.Multimesh;
         var visible = _playing ? _count : 0;
         multi.VisibleInstanceCount = visible;

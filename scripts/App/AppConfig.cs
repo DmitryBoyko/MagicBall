@@ -13,7 +13,7 @@ public sealed class AppConfig
     public const float VortexRampSeconds = 0.22f;
     public const float VortexFadeSeconds = 0.95f;
     public const float DefaultVortexSeconds = 4f;
-    public const int VortexParticleCount = 2600;
+    public const int VortexParticleCount = 1200;
     public const int TensorLength = 150528;
     public const int ImageSize = 224;
     public const int DefaultPhotoLookback = 2;
