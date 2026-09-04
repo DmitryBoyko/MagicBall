@@ -77,19 +77,33 @@ public static class AppPermissions
     public static bool OpenSystemSettings()
     {
         if (!IsAndroid)
+        {
+            GD.PushWarning("[AppPermissions] OpenSystemSettings: not Android");
             return false;
-        if (!FileAccess.FileExists(SettingsScriptPath))
+        }
+
+        if (!ResourceLoader.Exists(SettingsScriptPath) && !FileAccess.FileExists(SettingsScriptPath))
+        {
+            GD.PushWarning($"[AppPermissions] missing {SettingsScriptPath}");
             return false;
+        }
 
         try
         {
             var script = GD.Load<GDScript>(SettingsScriptPath);
             if (script == null)
+            {
+                GD.PushWarning("[AppPermissions] settings script load failed");
                 return false;
+            }
+
             var instance = script.New().AsGodotObject();
             if (instance == null)
                 return false;
-            return instance.Call("open_details").AsBool();
+
+            var ok = instance.Call("open_details").AsBool();
+            GD.Print($"[AppPermissions] OpenSystemSettings → {ok}");
+            return ok;
         }
         catch (Exception ex)
         {

@@ -100,10 +100,13 @@ public partial class PermissionsSheet : CanvasLayer
         _location.Toggled += on => OnToggleLocation(on);
         box.AddChild(_location);
 
-        var system = UiTheme.MakeQuietButton("Системные настройки приложения", UiTheme.FontModalCaption);
-        system.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        system.CustomMinimumSize = new Vector2(0, 48);
-        system.Pressed += () => AppPermissions.OpenSystemSettings();
+        var system = UiTheme.MakeButton("Системные настройки приложения", UiTheme.FontModalCaption);
+        system.CustomMinimumSize = new Vector2(0, 56);
+        system.Pressed += () =>
+        {
+            if (!AppPermissions.OpenSystemSettings())
+                GD.PushWarning("[PermissionsSheet] не удалось открыть системные настройки");
+        };
         box.AddChild(system);
 
         var close = UiTheme.MakeButton("Закрыть");
