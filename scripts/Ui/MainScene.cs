@@ -81,18 +81,36 @@ public partial class MainScene : Control
     private void PresentStartupModals()
     {
         var needProfile = ProfileStore.Current is not { IsComplete: true };
-        var shownPerms = _permissionsOnboarding.TryPresent();
+        var shownPerms = false;
+        try
+        {
+            shownPerms = _permissionsOnboarding.TryPresent();
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[MainScene] permissions modal: {ex.Message}");
+        }
+
         if (shownPerms)
         {
-            _permissionsOnboarding.Closed += () =>
+            void OnPermsClosed()
             {
+                _permissionsOnboarding.Closed -= OnPermsClosed;
                 if (needProfile)
-                    _modal.Present(editMode: false);
-            };
+                    CallDeferred(MethodName.PresentProfileIfNeeded);
+            }
+
+            _permissionsOnboarding.Closed += OnPermsClosed;
             return;
         }
 
         if (needProfile)
+            PresentProfileIfNeeded();
+    }
+
+    private void PresentProfileIfNeeded()
+    {
+        if (ProfileStore.Current is not { IsComplete: true })
             _modal.Present(editMode: false);
     }
 

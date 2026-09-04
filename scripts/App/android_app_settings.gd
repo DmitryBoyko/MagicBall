@@ -1,6 +1,6 @@
 class_name AndroidAppSettings
 extends RefCounted
-## Opens this app's system permission screen. No NEW_TASK+NO_HISTORY (AtlasPhoto).
+## Opens this app's system permission screen.
 
 
 func open_details() -> bool:
@@ -29,16 +29,6 @@ func open_details() -> bool:
 		intent.addFlags(0x10000000)
 	context.startActivity(intent)
 	return true
-
-
-func sdk_int() -> int:
-	if OS.get_name() != "Android" or not Engine.has_singleton("JavaClassWrapper"):
-		return 0
-	var wrapper: Object = Engine.get_singleton("JavaClassWrapper")
-	var version: Object = wrapper.wrap("android.os.Build$VERSION")
-	if version == null:
-		return 0
-	return int(version.SDK_INT)
 
 
 func _context(runtime: Object) -> Object:

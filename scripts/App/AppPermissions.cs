@@ -3,8 +3,7 @@ using Godot;
 namespace CrystalBall.App;
 
 /// <summary>
-/// Runtime-разрешения: галерея (фото в промпт) и геолокация (погода / город).
-/// Запрос поштучно из онбординг-модалки и из настроек.
+/// Runtime-разрешения: галерея и геолокация. Check/Request без Java SDK (только OS.*).
 /// </summary>
 public readonly record struct AppPermissionStatus(bool PhotosGranted, bool LocationGranted)
 {
@@ -33,20 +32,31 @@ public static class AppPermissions
         return new AppPermissionStatus(PhotosGranted(granted), LocationGranted(granted));
     }
 
-    public static void RequestPhotos()
+    public static bool RequestPhotos()
     {
-        if (!IsAndroid || Check().PhotosGranted)
-            return;
-        foreach (var name in PhotoPermissions())
-            OS.RequestPermission(name);
+        if (!IsAndroid)
+            return true;
+        if (Check().PhotosGranted)
+            return true;
+
+        // Оба имени: на API 33+ сработает Images, на старых — Storage. Лишний запрос система игнорирует.
+        GD.Print("[AppPermissions] RequestPhotos");
+        OS.RequestPermission(ReadMediaImages);
+        OS.RequestPermission(ReadExternalStorage);
+        return Check().PhotosGranted;
     }
 
-    public static void RequestLocation()
+    public static bool RequestLocation()
     {
-        if (!IsAndroid || Check().LocationGranted)
-            return;
+        if (!IsAndroid)
+            return true;
+        if (Check().LocationGranted)
+            return true;
+
+        GD.Print("[AppPermissions] RequestLocation");
         OS.RequestPermission(FineLocation);
         OS.RequestPermission(CoarseLocation);
+        return Check().LocationGranted;
     }
 
     public static bool RequestMissing()
@@ -71,46 +81,30 @@ public static class AppPermissions
         if (!FileAccess.FileExists(SettingsScriptPath))
             return false;
 
-        var script = GD.Load<GDScript>(SettingsScriptPath);
-        if (script == null)
+        try
+        {
+            var script = GD.Load<GDScript>(SettingsScriptPath);
+            if (script == null)
+                return false;
+            var instance = script.New().AsGodotObject();
+            if (instance == null)
+                return false;
+            return instance.Call("open_details").AsBool();
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[AppPermissions] OpenSystemSettings: {ex.Message}");
             return false;
-        var instance = script.New().AsGodotObject();
-        if (instance == null)
-            return false;
-        return instance.Call("open_details").AsBool();
-    }
-
-    public static int AndroidSdk()
-    {
-        if (!IsAndroid)
-            return 0;
-        if (!FileAccess.FileExists(SettingsScriptPath))
-            return 0;
-        var script = GD.Load<GDScript>(SettingsScriptPath);
-        if (script == null)
-            return 0;
-        var instance = script.New().AsGodotObject();
-        return instance?.Call("sdk_int").AsInt32() ?? 0;
-    }
-
-    public static string[] PhotoPermissions()
-    {
-        var sdk = AndroidSdk();
-        if (sdk >= 33)
-            return [ReadMediaImages, ReadMediaUserSelected];
-        return [ReadExternalStorage];
+        }
     }
 
     private static bool LocationGranted(string[] granted) =>
         Has(granted, FineLocation) || Has(granted, CoarseLocation);
 
-    private static bool PhotosGranted(string[] granted)
-    {
-        var sdk = AndroidSdk();
-        if (sdk >= 33)
-            return Has(granted, ReadMediaImages);
-        return Has(granted, ReadExternalStorage);
-    }
+    private static bool PhotosGranted(string[] granted) =>
+        Has(granted, ReadMediaImages)
+        || Has(granted, ReadMediaUserSelected)
+        || Has(granted, ReadExternalStorage);
 
     private static bool Has(string[] granted, string name)
     {
