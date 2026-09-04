@@ -8,7 +8,7 @@ namespace CrystalBall.Context;
 /// </summary>
 public sealed class CastingProgress
 {
-    public const double MinSecondsBetween = 0.55;
+    public const double MinSecondsBetween = 0.28;
 
     private readonly CastingLogSheet _log;
     private readonly SceneTree? _tree;

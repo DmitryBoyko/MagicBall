@@ -1,0 +1,12 @@
+---
+description: Token economy — apply in every MagicalBall chat
+alwaysApply: true
+---
+
+# Token economy (MagicalBall)
+
+- Ignore unless needed: `addons/**/bin`, `models/**`, `.godot/`, `*.apk`, `*.aab`, `proxy/.venv`, `deploy/backups`.
+- Don't open `docs/` wholesale — section-read only.
+- Proxy/VPS work ≠ full client scan; client UI ≠ full `proxy/` scan.
+- Default reply: short RU/EN, no architecture digressions.
+- Rebuild APK mention once when device-only; don't re-explain stack.

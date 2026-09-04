@@ -43,6 +43,7 @@ public partial class AudioService : Node
     private double _birdBurstLeft;
     private bool _advancing;
     private bool _vortexActive;
+    private bool _uiReady;
 
     public override void _Ready()
     {
@@ -79,6 +80,15 @@ public partial class AudioService : Node
         ShuffleSession();
         _birdGap = 2.0 + Random.Shared.NextDouble() * 3.0;
         GD.Print($"[AudioService] {_session.Count} tracks, {_birdClips.Count} bird clips");
+        // Не стартуем до первого кадра Main — иначе музыка на тёмном boot splash.
+    }
+
+    /// <summary>Вызвать, когда главный UI уже на экране.</summary>
+    public void NotifyUiReady()
+    {
+        if (_uiReady)
+            return;
+        _uiReady = true;
         Apply(AppSettingsStore.Current.MusicEnabled);
     }
 
@@ -107,6 +117,9 @@ public partial class AudioService : Node
                 _mixTween?.Kill();
             return;
         }
+
+        if (!_uiReady)
+            return;
 
         EnsurePlaying();
         ApplyAmbientVolumes(immediate: true);
@@ -280,7 +293,7 @@ public partial class AudioService : Node
 
     private void TickMusicWatchdog(double delta)
     {
-        if (_music == null || !AppSettingsStore.Current.MusicEnabled)
+        if (!_uiReady || _music == null || !AppSettingsStore.Current.MusicEnabled)
         {
             _silence = 0;
             return;
@@ -302,7 +315,7 @@ public partial class AudioService : Node
 
     private void TickBirds(double delta)
     {
-        if (_birds == null || !AppSettingsStore.Current.BirdsEnabled || _birdClips.Count == 0)
+        if (!_uiReady || _birds == null || !AppSettingsStore.Current.BirdsEnabled || _birdClips.Count == 0)
             return;
 
         if (_birds.Playing)
@@ -323,7 +336,7 @@ public partial class AudioService : Node
 
     private void EnsurePlaying()
     {
-        if (_music == null || !AppSettingsStore.Current.MusicEnabled)
+        if (!_uiReady || _music == null || !AppSettingsStore.Current.MusicEnabled)
             return;
 
         if (_music.Playing)

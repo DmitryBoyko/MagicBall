@@ -102,11 +102,7 @@ public partial class PermissionsSheet : CanvasLayer
 
         var system = UiTheme.MakeButton("Системные настройки приложения", UiTheme.FontModalCaption);
         system.CustomMinimumSize = new Vector2(0, 56);
-        system.Pressed += () =>
-        {
-            if (!AppPermissions.OpenSystemSettings())
-                GD.PushWarning("[PermissionsSheet] не удалось открыть системные настройки");
-        };
+        system.Pressed += OnOpenSystemSettings;
         box.AddChild(system);
 
         var close = UiTheme.MakeButton("Закрыть");
@@ -163,6 +159,18 @@ public partial class PermissionsSheet : CanvasLayer
     }
 
     private void OnOsPermissionResult(string _permission, bool _granted) => Refresh();
+
+    private void OnOpenSystemSettings()
+    {
+        // После отпускания кнопки — чтобы жест UI не перехватывал переход в Settings.
+        CallDeferred(MethodName.OpenSystemSettingsDeferred);
+    }
+
+    private void OpenSystemSettingsDeferred()
+    {
+        if (!AppPermissions.OpenSystemSettings())
+            GD.PushWarning("[PermissionsSheet] не удалось открыть системные настройки");
+    }
 
     private void Dismiss()
     {

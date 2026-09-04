@@ -64,8 +64,24 @@ public static class PhotoSampler
         Task? warmup;
         lock (Gate)
             warmup = _warmupTask;
-        if (warmup is { IsCompleted: false })
-            await warmup.ConfigureAwait(true);
+
+        // Ждём прогрев только если галерея уже доступна; иначе не блокируем ритуал.
+        if (warmup is { IsCompleted: false }
+            && (!AppPermissions.IsAndroid || AppPermissions.Check().PhotosGranted))
+        {
+            var finished = await Task.WhenAny(warmup, DelaySecondsAsync(0.35)).ConfigureAwait(true);
+            if (finished == warmup)
+            {
+                try
+                {
+                    await warmup.ConfigureAwait(true);
+                }
+                catch
+                {
+                    // прогрев упал — ниже полный скан
+                }
+            }
+        }
 
         var take = AppConfig.Current.PhotoLookbackCount;
         return await AnalyzePathsAsync(take).ConfigureAwait(true);
@@ -75,17 +91,10 @@ public static class PhotoSampler
     {
         await YieldFrameAsync().ConfigureAwait(true);
 
-        // На Android ждём выдачи галереи — иначе прогрев пустой.
-        for (var i = 0; i < 20 && generation == _warmupGeneration; i++)
-        {
-            if (!AppPermissions.IsAndroid || AppPermissions.Check().PhotosGranted)
-                break;
-            await DelaySecondsAsync(0.25).ConfigureAwait(true);
-        }
-
         if (generation != _warmupGeneration)
             return;
 
+        // Не крутим секунды в ожидании разрешения — иначе «Спросить» ждёт этот прогрев.
         if (AppPermissions.IsAndroid && !AppPermissions.Check().PhotosGranted)
             return;
 

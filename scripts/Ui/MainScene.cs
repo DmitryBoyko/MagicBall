@@ -317,6 +317,7 @@ public partial class MainScene : Control
         PlaceBallCluster(start);
         _ball.Visible = true;
         _sparks.Visible = true;
+        GetNodeOrNull<AudioService>("/root/AudioService")?.NotifyUiReady();
         TweenBallToTarget(IntroSeconds);
     }
 
@@ -696,14 +697,13 @@ public partial class MainScene : Control
 
         // Скан галереи параллельно с ранними стадиями протокола и вортексом.
         var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
+        var geoTask = GeoLocationService.ResolveForAskAsync();
+        var weatherTask = WeatherService.ResolveForAskAsync();
 
         await casting.ReportAsync(CastingStage.Name);
         await casting.ReportAsync(CastingStage.Zodiac);
         await casting.ReportAsync(CastingStage.Destiny);
         await casting.ReportAsync(CastingStage.Time);
-
-        var geoTask = GeoLocationService.ResolveAsync();
-        var weatherTask = WeatherService.ResolveAsync();
 
         await casting.ReportAsync(CastingStage.Geo);
         var geo = await geoTask;

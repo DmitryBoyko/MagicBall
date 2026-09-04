@@ -1,0 +1,10 @@
+---
+description: MagicalBall stack pointer (keep tiny)
+alwaysApply: true
+---
+
+# MagicalBall
+
+Godot 4.7 Mono C# · Android · `space.easypeasymatch.magicball`. Details: `AGENTS.md`. Verify: `dotnet build` + Godot console below. Diff minimal.
+
+CLI: `C:\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe`

@@ -16,13 +16,17 @@ public static class WeatherService
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; weather)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan MissTtl = TimeSpan.FromMinutes(2);
+    public static readonly TimeSpan AskJoinBudget = TimeSpan.FromMilliseconds(280);
+
     private static readonly System.Net.Http.HttpClient Http = CreateHttp();
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     private static string _phrase = "";
     private static DateTime _resolvedUtc = DateTime.MinValue;
+    private static DateTime _missUtc = DateTime.MinValue;
     private static (double Lat, double Lon)? _cachedCoords;
-    private static Task? _warmup;
+    private static Task<string>? _warmup;
 
     public static bool HasPhrase => !string.IsNullOrWhiteSpace(_phrase);
 
@@ -30,14 +34,48 @@ public static class WeatherService
 
     public static void Warmup()
     {
+        if (IsFreshMiss())
+            return;
         if (_warmup == null || (_warmup.IsCompleted && !IsFresh()))
             _warmup = ResolveAsync();
+    }
+
+    /// <summary>Для «Спросить»: не ждать полный weather fetch.</summary>
+    public static async Task<string> ResolveForAskAsync()
+    {
+        if (IsFresh())
+            return Phrase;
+        if (IsFreshMiss())
+            return "";
+
+        Warmup();
+        var pending = _warmup;
+        if (pending == null)
+            return "";
+
+        if (pending.IsCompleted)
+            return IsFresh() ? Phrase : "";
+
+        var finished = await Task.WhenAny(pending, Task.Delay(AskJoinBudget)).ConfigureAwait(true);
+        if (finished != pending)
+            return IsFresh() ? Phrase : "";
+
+        try
+        {
+            return await pending.ConfigureAwait(true);
+        }
+        catch
+        {
+            return IsFresh() ? Phrase : "";
+        }
     }
 
     public static async Task<string> ResolveAsync()
     {
         if (IsFresh())
             return Phrase;
+        if (IsFreshMiss())
+            return "";
 
         using var cts = new CancellationTokenSource(Budget);
         try
@@ -46,13 +84,13 @@ public static class WeatherService
         }
         catch (OperationCanceledException)
         {
-            Reset();
+            MarkMiss();
             return "";
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[Weather] {ex.Message}");
-            Reset();
+            MarkMiss();
             return "";
         }
     }
@@ -60,18 +98,24 @@ public static class WeatherService
     private static bool IsFresh() =>
         HasPhrase && _resolvedUtc != DateTime.MinValue && DateTime.UtcNow - _resolvedUtc < CacheTtl;
 
+    private static bool IsFreshMiss() =>
+        _missUtc != DateTime.MinValue && DateTime.UtcNow - _missUtc < MissTtl;
+
     private static bool IsFreshFor((double Lat, double Lon) coords) =>
         IsFresh() && _cachedCoords != null && Nearby(_cachedCoords.Value, coords);
 
     private static bool Nearby((double Lat, double Lon) a, (double Lat, double Lon) b) =>
         Math.Abs(a.Lat - b.Lat) < 0.25 && Math.Abs(a.Lon - b.Lon) < 0.25;
 
-    private static void Reset()
+    private static void MarkMiss()
     {
+        _missUtc = DateTime.UtcNow;
         _phrase = "";
         _resolvedUtc = DateTime.MinValue;
         _cachedCoords = null;
     }
+
+    private static void Reset() => MarkMiss();
 
     private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken)
     {
@@ -82,7 +126,7 @@ public static class WeatherService
             cancellationToken.ThrowIfCancellationRequested();
             if (coords == null)
             {
-                Reset();
+                MarkMiss();
                 return "";
             }
 
@@ -93,13 +137,14 @@ public static class WeatherService
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(phrase))
             {
-                Reset();
+                MarkMiss();
                 return "";
             }
 
             _phrase = phrase.Trim();
             _cachedCoords = coords;
             _resolvedUtc = DateTime.UtcNow;
+            _missUtc = DateTime.MinValue;
             return Phrase;
         }
         finally

@@ -97,6 +97,16 @@ public static class AppPermissions
                 return false;
             }
 
+            // Сначала static (без временного RefCounted); иначе instance.Call.
+            var fromStatic = script.Call("open_details_static");
+            if (fromStatic.VariantType != Variant.Type.Nil)
+            {
+                var okStatic = fromStatic.AsBool();
+                GD.Print($"[AppPermissions] OpenSystemSettings static → {okStatic}");
+                if (okStatic)
+                    return true;
+            }
+
             var instance = script.New().AsGodotObject();
             if (instance == null)
                 return false;

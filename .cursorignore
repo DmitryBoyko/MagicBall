@@ -1,0 +1,18 @@
+# Keep heavy/binary paths out of agent index
+**/.godot/
+**/.mono/
+**/bin/
+**/obj/
+**/.vs/
+**/models/**
+**/*.onnx
+**/*.apk
+**/*.aab
+**/*.so
+**/*.dll
+**/*.aar
+**/addons/**/bin/
+**/proxy/.venv/
+**/proxy/__pycache__/
+**/deploy/backups/
+**/node_modules/

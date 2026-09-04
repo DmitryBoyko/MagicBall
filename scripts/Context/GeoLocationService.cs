@@ -18,13 +18,17 @@ public static class GeoLocationService
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan MissTtl = TimeSpan.FromMinutes(2);
+    /// <summary>На «Спросить» не ждём полный reverse-geocode — только кэш / короткий join.</summary>
+    public static readonly TimeSpan AskJoinBudget = TimeSpan.FromMilliseconds(280);
 
     private static readonly System.Net.Http.HttpClient Http = CreateHttp();
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     private static string _settlement = "";
     private static DateTime _resolvedUtc = DateTime.MinValue;
-    private static Task? _warmup;
+    private static DateTime _missUtc = DateTime.MinValue;
+    private static Task<string>? _warmup;
 
     public static bool HasSettlement => !string.IsNullOrWhiteSpace(_settlement);
 
@@ -36,16 +40,52 @@ public static class GeoLocationService
 
     public static void Warmup()
     {
+        if (IsFreshMiss())
+            return;
         if (_warmup == null || (_warmup.IsCompleted && !IsFresh()))
             _warmup = ResolveAsync();
     }
 
     public static void RequestAndroidPermission() => AppPermissions.RequestMissing();
 
+    /// <summary>
+    /// Для ритуала «Спросить»: взять готовое или почти готовое, не блокируя на MaxSeconds.
+    /// </summary>
+    public static async Task<string> ResolveForAskAsync()
+    {
+        if (IsFresh())
+            return Settlement;
+        if (IsFreshMiss())
+            return "";
+
+        Warmup();
+        var pending = _warmup;
+        if (pending == null)
+            return "";
+
+        if (pending.IsCompleted)
+            return IsFresh() ? Settlement : "";
+
+        var finished = await Task.WhenAny(pending, Task.Delay(AskJoinBudget)).ConfigureAwait(true);
+        if (finished != pending)
+            return IsFresh() ? Settlement : "";
+
+        try
+        {
+            return await pending.ConfigureAwait(true);
+        }
+        catch
+        {
+            return IsFresh() ? Settlement : "";
+        }
+    }
+
     public static async Task<string> ResolveAsync()
     {
         if (IsFresh())
             return Settlement;
+        if (IsFreshMiss())
+            return "";
 
         using var cts = new CancellationTokenSource(Budget);
         try
@@ -54,13 +94,13 @@ public static class GeoLocationService
         }
         catch (OperationCanceledException)
         {
-            Reset();
+            MarkMiss();
             return "";
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[GeoLocation] {ex.Message}");
-            Reset();
+            MarkMiss();
             return "";
         }
     }
@@ -69,13 +109,24 @@ public static class GeoLocationService
         HasSettlement && LastCoords != null && _resolvedUtc != DateTime.MinValue
         && DateTime.UtcNow - _resolvedUtc < CacheTtl;
 
-    private static void Reset()
+    private static bool IsFreshMiss() =>
+        _missUtc != DateTime.MinValue && DateTime.UtcNow - _missUtc < MissTtl;
+
+    private static void MarkMiss()
+    {
+        _missUtc = DateTime.UtcNow;
+        ResetSettlementOnly();
+    }
+
+    private static void ResetSettlementOnly()
     {
         _settlement = "";
         _resolvedUtc = DateTime.MinValue;
         LastCoords = null;
         LastAccuracyMeters = null;
     }
+
+    private static void Reset() => MarkMiss();
 
     private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken)
     {
@@ -85,13 +136,13 @@ public static class GeoLocationService
             if (IsFresh())
                 return Settlement;
 
-            RequestAndroidPermission();
+            // Разрешения запрашивает UI (онбординг / настройки), не фоновый resolve.
             var fix = ReadAndroidFix();
             cancellationToken.ThrowIfCancellationRequested();
 
             if (fix == null)
             {
-                Reset();
+                MarkMiss();
                 return "";
             }
 
@@ -107,7 +158,7 @@ public static class GeoLocationService
             }
 
             // Reverse пустой — город в промпт не подставляем (IP-fallback убран).
-            Reset();
+            MarkMiss();
             return "";
         }
         finally
@@ -120,10 +171,13 @@ public static class GeoLocationService
     {
         _settlement = name.Trim();
         _resolvedUtc = HasSettlement ? DateTime.UtcNow : DateTime.MinValue;
-        if (!HasSettlement)
+        if (HasSettlement)
+            _missUtc = DateTime.MinValue;
+        else
         {
             LastCoords = null;
             LastAccuracyMeters = null;
+            _missUtc = DateTime.UtcNow;
         }
     }
 

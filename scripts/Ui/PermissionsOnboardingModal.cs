@@ -142,7 +142,7 @@ public partial class PermissionsOnboardingModal : CanvasLayer
         _openSettings = UiTheme.MakeButton("Открыть системные настройки", UiTheme.FontModalCaption);
         _openSettings.CustomMinimumSize = new Vector2(0, 52);
         _openSettings.Visible = false;
-        _openSettings.Pressed += () => AppPermissions.OpenSystemSettings();
+        _openSettings.Pressed += () => CallDeferred(MethodName.OpenSystemSettingsDeferred);
         box.AddChild(_openSettings);
 
         // Обычная кнопка — QuietButton на части устройств плохо ловит Pressed.
@@ -349,6 +349,12 @@ public partial class PermissionsOnboardingModal : CanvasLayer
     {
         // «Позже» / «Закрыть» — сразу выйти, без Java и без следующего шага.
         Dismiss();
+    }
+
+    private void OpenSystemSettingsDeferred()
+    {
+        if (!AppPermissions.OpenSystemSettings())
+            GD.PushWarning("[PermissionsOnboarding] не удалось открыть системные настройки");
     }
 
     private void Dismiss()
