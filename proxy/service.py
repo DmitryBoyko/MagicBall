@@ -29,6 +29,7 @@ class OracleService:
         return result
 
     async def _job(self, body: OracleIn, skip_ai: bool) -> OracleOut:
+        _sanitize_visual_noise(body)
         key = fingerprint(body)
         if skip_ai:
             return self._fallback(body, key, "очередь превысила AI_QUEUE_TIMEOUT или переполнена")
@@ -53,3 +54,16 @@ class OracleService:
             cached.fallback_reason = f"{reason}; {cached.fallback_reason}"
             return cached
         return synthesize_result(body, reason)
+
+
+def _sanitize_visual_noise(body: OracleIn) -> None:
+    """Убираем сырьё палитры/имён красок — иначе модель лепит «малиновые тени»."""
+    snap = body.dynamic_snapshot
+    snap.photo_color_palette = ""
+    snap.ball_tint_name = ""
+    mod = (snap.ball_tint_modifier or "").strip()
+    if "—" in mod:
+        snap.ball_tint_modifier = mod.split("—")[-1].strip()
+    elif " - " in mod:
+        snap.ball_tint_modifier = mod.split(" - ")[-1].strip()
+

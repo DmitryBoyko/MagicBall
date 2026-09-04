@@ -6,8 +6,8 @@ public static class SessionBallTint
     public static string Name { get; private set; } = "";
     public static string Meaning { get; private set; } = "";
 
-    public static string Modifier =>
-        string.IsNullOrEmpty(Name) ? "" : $"{Name} — {Meaning}";
+    /// <summary>В промпт — только смысл тона, без имени-краски («Лавандовый…»).</summary>
+    public static string Modifier => Meaning ?? "";
 
     public static void Set(string name, string meaning)
     {

@@ -29,8 +29,8 @@ public sealed class AiGateway : IDisposable
     {
         if (casting != null)
         {
-            await casting.ReportAsync(CastingStage.Weave, cancellationToken).ConfigureAwait(true);
-            await casting.ReportAsync(CastingStage.Await, cancellationToken).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.Weave, inPrompt: true, cancellationToken).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.Await, inPrompt: true, cancellationToken).ConfigureAwait(true);
         }
 
         if (_config.UseProxy && _proxy.IsConfigured)

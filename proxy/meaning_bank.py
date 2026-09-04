@@ -74,7 +74,7 @@ def synthesize(
         short = anchor.strip().split("(")[0].strip()
         hints.append(f"Якорь дня — {short}.")
     if tint and tint.strip():
-        hints.append(f"Стекло шепчет: {tint.strip().split('—')[0].strip()}.")
+        hints.append(f"Тон стекла: {tint.strip().split('—')[-1].strip().rstrip('.')}.")
     if hints:
         body = f"{body} {' '.join(hints[:3])}"
     return f"{body}\n[[ИТОГ]] {random.choice(GOLD)}"

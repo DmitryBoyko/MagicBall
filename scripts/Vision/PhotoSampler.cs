@@ -27,15 +27,18 @@ public static class PhotoSampler
     public static async Task<PhotoAnalysis> AnalyzeRecentAsync(CastingProgress? casting = null)
     {
         if (casting != null)
-            await casting.ReportAsync(CastingStage.PhotoScan).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.PhotoScan, inPrompt: true).ConfigureAwait(true);
 
         var analysis = await AnalyzeRecentCoreAsync().ConfigureAwait(true);
 
         if (casting != null)
         {
-            await casting.ReportAsync(CastingStage.PhotoMystic).ConfigureAwait(true);
-            await casting.ReportAsync(CastingStage.PhotoPalette).ConfigureAwait(true);
-            await casting.ReportAsync(CastingStage.PhotoLuminance).ConfigureAwait(true);
+            var mysticOk = !string.IsNullOrWhiteSpace(analysis.MysticTag)
+                && !string.Equals(analysis.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
+            await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.PhotoPalette, inPrompt: false).ConfigureAwait(true);
+            await casting.ReportAsync(CastingStage.PhotoLuminance, !string.IsNullOrWhiteSpace(analysis.LuminanceVibe))
+                .ConfigureAwait(true);
         }
 
         return analysis;

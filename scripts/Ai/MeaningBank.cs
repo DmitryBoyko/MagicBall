@@ -32,7 +32,7 @@ public sealed class MeaningBank
         if (!string.IsNullOrWhiteSpace(anchor))
             hints.Add($"Якорь дня — {anchor.Split('(')[0].Trim()}.");
         if (!string.IsNullOrWhiteSpace(tint))
-            hints.Add($"Стекло шепчет: {tint.Split('—')[0].Trim()}.");
+            hints.Add($"Тон стекла: {tint.Trim().TrimEnd('.')}.");
         if (hints.Count > 0)
             body = $"{body} {string.Join(" ", hints.Take(3))}";
 

@@ -50,3 +50,22 @@ def test_extract_summary_plain_itog_line() -> None:
     body, summary = extract_summary("Держи курс мягко.\nИТОГ\nШаг за шагом")
     assert "ИТОГ" not in body.upper()
     assert summary == "Шаг за шагом"
+
+
+def test_extract_summary_itog_same_line_no_colon() -> None:
+    body, summary = extract_summary("Держи курс мягко.\nИТОГ Шаг за шагом")
+    assert "ИТОГ" not in body.upper()
+    assert "ИТОГ" not in summary.upper()
+    assert summary == "Шаг за шагом"
+
+
+def test_strip_markup_drops_itog_token_everywhere() -> None:
+    cleaned = strip_markup("Слушай.\nИТОГ: Верни себе право\nИ ещё ИТОГ в конце")
+    assert "ИТОГ" not in cleaned.upper()
+    assert "Верни себе право" in cleaned
+
+
+def test_strip_keeps_itoge_word() -> None:
+    cleaned = strip_markup("В итоге ты уже готов.")
+    assert "итоге" in cleaned.lower()
+

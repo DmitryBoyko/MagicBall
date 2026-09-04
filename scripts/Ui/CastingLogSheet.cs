@@ -4,24 +4,26 @@ using Godot;
 namespace CrystalBall.Ui;
 
 /// <summary>
-/// Ритуальный лог сборки промпта: построчный fade-in без модалки и рамки.
-/// Лёгкое затемнение под текстом; вихрь рисуется слоем выше.
+/// Ритуальный лог сборки промпта: медленный построчный fade-in и ★ статуса сигнала.
 /// </summary>
 public partial class CastingLogSheet : CanvasLayer
 {
     private const float DimAlpha = 0.32f;
-    private const float LineFadeIn = 0.35f;
-    private const float TopFadeOut = 0.55f;
-    private const int MaxVisibleLines = 8;
+    private const float LineFadeIn = 0.7f;
+    private const float TopFadeOut = 0.65f;
+    private const int MaxVisibleLines = 12;
     private const int TextPadPx = 20;
+    private const string StarGlyph = "★";
 
-    /// <summary>Выше вихря — иначе 2600 частиц полностью закрывают фразы.</summary>
     public const int CanvasLayerIndex = 28;
+
+    private static readonly Color StarOk = UiTheme.Gold;
+    private static readonly Color StarMiss = UiTheme.Cyan;
 
     private Control _band = null!;
     private ScrollContainer _scroll = null!;
     private VBoxContainer _lines = null!;
-    private readonly List<Label> _labels = [];
+    private readonly List<Control> _rows = [];
 
     public override void _Ready()
     {
@@ -80,7 +82,7 @@ public partial class CastingLogSheet : CanvasLayer
         {
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
-        _lines.AddThemeConstantOverride("separation", 10);
+        _lines.AddThemeConstantOverride("separation", 12);
         _scroll.AddChild(_lines);
     }
 
@@ -105,21 +107,38 @@ public partial class CastingLogSheet : CanvasLayer
         ClearLines();
     }
 
-    public void AppendLine(string phrase)
+    /// <param name="inPrompt">Золотая ★ — сигнал в промпте; голубая ★ — нет.</param>
+    public void AppendLine(string phrase, bool inPrompt = true)
     {
         if (!Visible || string.IsNullOrWhiteSpace(phrase))
             return;
 
+        var row = new HBoxContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Modulate = new Color(1f, 1f, 1f, 0f),
+        };
+        row.AddThemeConstantOverride("separation", 10);
+
+        var star = UiTheme.MakeLabel(StarGlyph, UiTheme.FontReadingBody - 2, inPrompt ? StarOk : StarMiss);
+        star.MouseFilter = Control.MouseFilterEnum.Ignore;
+        star.CustomMinimumSize = new Vector2(36, 0);
+        row.AddChild(star);
+
         var label = UiTheme.MakeLabel(phrase, UiTheme.FontReadingBody - 4, UiTheme.Cream);
         label.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        label.Modulate = new Color(1f, 1f, 1f, 0f);
-        _lines.AddChild(label);
-        _labels.Add(label);
+        label.HorizontalAlignment = HorizontalAlignment.Left;
+        label.MouseFilter = Control.MouseFilterEnum.Ignore;
+        row.AddChild(label);
+
+        _lines.AddChild(row);
+        _rows.Add(row);
 
         var tween = CreateTween();
         tween.SetEase(Tween.EaseType.Out);
         tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(label, "modulate:a", 1f, LineFadeIn);
+        tween.TweenProperty(row, "modulate:a", 1f, LineFadeIn);
 
         TrimTopIfNeeded();
         CallDeferred(MethodName.ScrollToBottom);
@@ -127,26 +146,26 @@ public partial class CastingLogSheet : CanvasLayer
 
     private void TrimTopIfNeeded()
     {
-        while (_labels.Count > MaxVisibleLines)
+        while (_rows.Count > MaxVisibleLines)
         {
-            var oldest = _labels[0];
-            _labels.RemoveAt(0);
+            var oldest = _rows[0];
+            _rows.RemoveAt(0);
             FadeAndFree(oldest);
         }
     }
 
-    private void FadeAndFree(Label label)
+    private void FadeAndFree(Control row)
     {
-        if (!IsInstanceValid(label))
+        if (!IsInstanceValid(row))
             return;
         var tween = CreateTween();
         tween.SetEase(Tween.EaseType.In);
         tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(label, "modulate:a", 0f, TopFadeOut);
+        tween.TweenProperty(row, "modulate:a", 0f, TopFadeOut);
         tween.TweenCallback(Callable.From(() =>
         {
-            if (IsInstanceValid(label))
-                label.QueueFree();
+            if (IsInstanceValid(row))
+                row.QueueFree();
         }));
     }
 
@@ -159,13 +178,13 @@ public partial class CastingLogSheet : CanvasLayer
 
     private void ClearLines()
     {
-        foreach (var label in _labels)
+        foreach (var row in _rows)
         {
-            if (IsInstanceValid(label))
-                label.QueueFree();
+            if (IsInstanceValid(row))
+                row.QueueFree();
         }
 
-        _labels.Clear();
+        _rows.Clear();
         if (_lines != null)
         {
             foreach (var child in _lines.GetChildren())

@@ -65,6 +65,7 @@ public partial class MainScene : Control
     private const float BallAskOpacity = 0.28f;
     private const float BallIdleLift = 0.10f;
     private const float BallAskLift = 0.38f;
+    private readonly BallRipples _ballRipples = new();
 
     public override void _Ready()
     {
@@ -116,6 +117,9 @@ public partial class MainScene : Control
 
     public override void _Process(double delta)
     {
+        if (_ball.Material is ShaderMaterial rippleMat)
+            _ballRipples.Tick(delta, rippleMat);
+
         if (!_introFinished)
             return;
         _idleTime += (float)delta;
@@ -143,10 +147,10 @@ public partial class MainScene : Control
 
     private void BuildTree()
     {
-        // Сразу не чёрный clear — пока грузится текстура фона.
+        // Пока Resolve() не поставил фон суток — тёмная подложка под цвет splash.
         var baseFill = new ColorRect
         {
-            Color = UiTheme.Ink,
+            Color = new Color(0.08f, 0.04f, 0.16f, 1f),
             MouseFilter = MouseFilterEnum.Ignore,
         };
         baseFill.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -171,16 +175,19 @@ public partial class MainScene : Control
         {
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = MouseFilterEnum.Ignore,
+            MouseFilter = MouseFilterEnum.Stop,
             Texture = MakeWhiteTexture(),
             Visible = false,
         };
+        _ball.GuiInput += OnBallGuiInput;
         _sparks = new BallSparks { MouseFilter = MouseFilterEnum.Ignore, Visible = false };
         var shader = LoadBallShader();
         if (shader != null)
         {
             var material = new ShaderMaterial { Shader = shader };
             RandomizeBallSession(material);
+            _ballRipples.Reset();
+            _ballRipples.Tick(0, material);
             _ball.Material = material;
         }
         else
@@ -358,6 +365,32 @@ public partial class MainScene : Control
         ApplyIdlePose();
         RefreshActionButton();
         CallDeferred(MethodName.PrewarmVortex);
+    }
+
+    private void OnBallGuiInput(InputEvent @event)
+    {
+        if (!_introFinished || !_ball.Visible)
+            return;
+
+        Vector2 local;
+        if (@event is InputEventScreenTouch { Pressed: true } touch)
+            local = touch.Position;
+        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mouse)
+            local = mouse.Position;
+        else
+            return;
+
+        var size = _ball.Size;
+        if (size.X < 4f || size.Y < 4f)
+            return;
+
+        var uv = new Vector2(local.X / size.X, local.Y / size.Y);
+        if (!_ballRipples.TryAddAtUv(uv))
+            return;
+
+        if (_ball.Material is ShaderMaterial mat)
+            _ballRipples.Tick(0, mat);
+        _ball.AcceptEvent();
     }
 
     private void PrewarmVortex() => _vortex?.Prewarm();
@@ -710,38 +743,45 @@ public partial class MainScene : Control
         var geoTask = GeoLocationService.ResolveForAskAsync();
         var weatherTask = WeatherService.ResolveForAskAsync();
 
-        // Сначала фразы ритуала — галерею стартуем после, иначе DirAccess фризит UI.
-        await casting.ReportAsync(CastingStage.Name);
-        await casting.ReportAsync(CastingStage.Zodiac);
-        await casting.ReportAsync(CastingStage.Destiny);
-        await casting.ReportAsync(CastingStage.Time);
+        static bool Ok(string? value) => !string.IsNullOrWhiteSpace(value);
+
+        await casting.ReportAsync(CastingStage.Name, Ok(profile.UserName));
+        await casting.ReportAsync(CastingStage.Zodiac, Ok(profile.ZodiacSign) || Ok(profile.BirthDate));
+        await casting.ReportAsync(CastingStage.Destiny, profile.DestinyNumber != 0 || Ok(profile.BirthDate));
+        await casting.ReportAsync(CastingStage.Time, true);
 
         var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
 
-        await casting.ReportAsync(CastingStage.Geo);
         var geo = await geoTask;
+        await casting.ReportAsync(CastingStage.Geo, Ok(geo));
 
-        await casting.ReportAsync(CastingStage.Weather);
         var weather = await weatherTask;
+        await casting.ReportAsync(CastingStage.Weather, Ok(weather));
 
-        await casting.ReportAsync(CastingStage.Battery);
-        await casting.ReportAsync(CastingStage.Power);
-        await casting.ReportAsync(CastingStage.InquiryPulse);
+        // Батарея / питание / пульс всегда кладутся в snapshot при Assemble.
+        await casting.ReportAsync(CastingStage.Battery, true);
+        await casting.ReportAsync(CastingStage.Power, true);
+        await casting.ReportAsync(CastingStage.InquiryPulse, true);
 
-        await casting.ReportAsync(CastingStage.PhotoScan);
         var photo = await photoTask;
-        await casting.ReportAsync(CastingStage.PhotoMystic);
-        await casting.ReportAsync(CastingStage.PhotoPalette);
-        await casting.ReportAsync(CastingStage.PhotoLuminance);
+        var mysticOk = Ok(photo.MysticTag)
+            && !string.Equals(photo.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
+        var scanOk = mysticOk || (Ok(photo.RawTag) && photo.RawTag != "unknown object");
+        await casting.ReportAsync(CastingStage.PhotoScan, scanOk);
+        await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk);
+        // Палитра в промпт больше не уходит.
+        await casting.ReportAsync(CastingStage.PhotoPalette, false);
+        await casting.ReportAsync(CastingStage.PhotoLuminance, Ok(photo.LuminanceVibe));
 
         var context = _context.Assemble(profile, photo);
-        context.DynamicSnapshot.GeoLocationType = string.IsNullOrWhiteSpace(geo) ? null : geo;
-        context.DynamicSnapshot.WeatherState = string.IsNullOrWhiteSpace(weather) ? null : weather;
+        context.DynamicSnapshot.GeoLocationType = Ok(geo) ? geo : null;
+        context.DynamicSnapshot.WeatherState = Ok(weather) ? weather : null;
+        var snap = context.DynamicSnapshot;
 
-        await casting.ReportAsync(CastingStage.Entropy);
-        await casting.ReportAsync(CastingStage.BallMood);
-        await casting.ReportAsync(CastingStage.BallTint);
-        await casting.ReportAsync(CastingStage.WorldPressure);
+        await casting.ReportAsync(CastingStage.Entropy, Ok(snap.EntropyWordAnchor));
+        await casting.ReportAsync(CastingStage.BallMood, Ok(snap.BallMoodModifier));
+        await casting.ReportAsync(CastingStage.BallTint, Ok(snap.BallTintModifier));
+        await casting.ReportAsync(CastingStage.WorldPressure, Ok(snap.WorldPressureModifier));
 
         var gateway = GameRoot.Instance?.Gateway ?? new AiGateway(AppConfig.Current);
         return await gateway.InterpretAsync(context, casting);
