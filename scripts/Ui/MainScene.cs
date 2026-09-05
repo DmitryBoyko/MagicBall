@@ -25,7 +25,6 @@ public partial class MainScene : Control
     private MarginContainer _uiPad = null!;
     private Label _askHint = null!;
     private Label _askTapHint = null!;
-    private Control _askHintGap = null!;
     private string _ritualHintText = "";
     private int _ritualTaps;
     private ulong _ritualLastTapMsec;
@@ -130,7 +129,13 @@ public partial class MainScene : Control
             return;
         _idleTime += (float)delta;
         ApplyIdlePose();
-        if (_ritualTaps is 1 or 2 && !_ritualLocked)
+        if (_ritualTaps == 1 && !_ritualLocked)
+        {
+            var elapsed = (Time.GetTicksMsec() - _ritualLastTapMsec) / 1000.0;
+            if (elapsed > RitualMaxGap)
+                ResetRitualTaps();
+        }
+        else if (_ritualTaps == 2 && !_ritualLocked)
         {
             var elapsed = (Time.GetTicksMsec() - _ritualLastTapMsec) / 1000.0;
             if (elapsed > RitualMaxGap)
@@ -228,11 +233,12 @@ public partial class MainScene : Control
             MouseFilter = MouseFilterEnum.Ignore,
         });
 
-        _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.78f));
+        _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.96f));
         _askHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _askHint.MouseFilter = MouseFilterEnum.Ignore;
-        _askHint.MaxLinesVisible = 4;
+        _askHint.MaxLinesVisible = 3;
         _askHint.Visible = false;
+        UiTheme.ApplyCaptionReadability(_askHint);
         var hintRng = new RandomNumberGenerator();
         hintRng.Randomize();
         _ritualHintText = AskFocusCatalog.Pick(hintRng);
@@ -240,24 +246,17 @@ public partial class MainScene : Control
 
         _askTapHint = UiTheme.MakeLabel(
             "и прикоснись три раза к шару-оракулу",
-            24,
-            new Color(UiTheme.Gold.R, UiTheme.Gold.G, UiTheme.Gold.B, 0.92f));
+            UiTheme.FontAskHint,
+            new Color(UiTheme.Gold.R, UiTheme.Gold.G, UiTheme.Gold.B, 0.96f));
         _askTapHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _askTapHint.MouseFilter = MouseFilterEnum.Ignore;
-        _askTapHint.MaxLinesVisible = 3;
+        _askTapHint.MaxLinesVisible = 2;
         _askTapHint.Visible = false;
-        _askTapHint.CustomMinimumSize = new Vector2(0, 64);
+        UiTheme.ApplyCaptionReadability(_askTapHint);
 
         var askBlock = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        askBlock.AddThemeConstantOverride("separation", 8);
-        _askHintGap = new Control
-        {
-            MouseFilter = MouseFilterEnum.Ignore,
-            CustomMinimumSize = new Vector2(0, 200),
-            Visible = false,
-        };
+        askBlock.AddThemeConstantOverride("separation", 6);
         askBlock.AddChild(_askHint);
-        askBlock.AddChild(_askHintGap);
         askBlock.AddChild(_askTapHint);
         bottom.AddChild(askBlock);
 
@@ -445,6 +444,15 @@ public partial class MainScene : Control
         }
 
         var gap = (now - _ritualLastTapMsec) / 1000.0;
+        if (_ritualTaps == 1 && gap > RitualMaxGap)
+        {
+            _ritualTaps = 1;
+            _ritualLastTapMsec = now;
+            RestoreRitualHint();
+            SetBallLook(BallLook.Idle);
+            return;
+        }
+
         if (gap < RitualMinGap || gap > RitualMaxGap)
         {
             _ = RejectRitualAsync();
@@ -524,8 +532,6 @@ public partial class MainScene : Control
             _askHint.Visible = hintsOn;
         if (_askTapHint != null)
             _askTapHint.Visible = hintsOn;
-        if (_askHintGap != null)
-            _askHintGap.Visible = _introFinished && !sheetOpen;
         CacheAskBottom();
     }
 

@@ -25,7 +25,7 @@ public static class UiTheme
     public const int FontReadingBody = 32;
     public const int FontReadingSummary = 34;
     public const int FontReadingButton = 28;
-    public const int FontAskHint = 32;
+    public const int FontAskHint = 26;
 
     public static Label MakeLabel(string text, int size, Color color, HorizontalAlignment align = HorizontalAlignment.Center)
     {
@@ -38,6 +38,16 @@ public static class UiTheme
         label.AddThemeFontSizeOverride("font_size", size);
         label.AddThemeColorOverride("font_color", color);
         return label;
+    }
+
+    public static void ApplyCaptionReadability(Label label)
+    {
+        label.AddThemeConstantOverride("outline_size", 10);
+        label.AddThemeColorOverride("font_outline_color", new Color(0.02f, 0.01f, 0.05f, 0.88f));
+        label.AddThemeConstantOverride("line_spacing", 2);
+        label.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.55f));
+        label.AddThemeConstantOverride("shadow_offset_x", 0);
+        label.AddThemeConstantOverride("shadow_offset_y", 2);
     }
 
     public static Button MakeButton(string text, int fontSize = FontModalButton)
