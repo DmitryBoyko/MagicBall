@@ -57,9 +57,6 @@ public sealed class DynamicSnapshot
     [JsonPropertyName("photo_mystic_tag")]
     public string PhotoMysticTag { get; set; } = string.Empty;
 
-    [JsonPropertyName("photo_color_palette")]
-    public string PhotoColorPalette { get; set; } = string.Empty;
-
     [JsonPropertyName("photo_luminance_vibe")]
     public string PhotoLuminanceVibe { get; set; } = string.Empty;
 
@@ -104,7 +101,6 @@ public sealed class PhotoAnalysis
 {
     public string RawTag { get; set; } = string.Empty;
     public string MysticTag { get; set; } = string.Empty;
-    public string ColorPalette { get; set; } = string.Empty;
     public string LuminanceVibe { get; set; } = string.Empty;
     /// <summary>true — брали кадры из галереи (этап PhotoScan в промпте).</summary>
     public bool FromGallery { get; set; }

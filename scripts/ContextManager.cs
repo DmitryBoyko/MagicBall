@@ -43,8 +43,6 @@ public partial class ContextManager : Node
         {
             snapshot.PhotoMysticTag = photo.MysticTag;
             snapshot.ImageNetRawTag = photo.RawTag;
-            // Палитру в промпт не отдаём — иначе LLM лепит «малиновые тени» без смысла.
-            snapshot.PhotoColorPalette = string.Empty;
             snapshot.PhotoLuminanceVibe = photo.LuminanceVibe;
         }
 

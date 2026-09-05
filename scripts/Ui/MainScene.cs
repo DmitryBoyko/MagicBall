@@ -23,9 +23,13 @@ public partial class MainScene : Control
     private VortexField _vortex = null!;
     private BackgroundWarp _warp = null!;
     private MarginContainer _uiPad = null!;
-    private Button _ask = null!;
     private Label _askHint = null!;
+    private Label _askTapHint = null!;
     private Control _askHintGap = null!;
+    private string _ritualHintText = "";
+    private int _ritualTaps;
+    private ulong _ritualLastTapMsec;
+    private bool _ritualLocked;
     private Button _otherApps = null!;
     private SettingsGearButton _gear = null!;
     private ProfileModal _modal = null!;
@@ -65,6 +69,8 @@ public partial class MainScene : Control
     private const float BallAskOpacity = 0.28f;
     private const float BallIdleLift = 0.10f;
     private const float BallAskLift = 0.38f;
+    private const float RitualMinGap = 0.5f;
+    private const float RitualMaxGap = 1.0f;
     private readonly BallRipples _ballRipples = new();
 
     public override void _Ready()
@@ -124,6 +130,12 @@ public partial class MainScene : Control
             return;
         _idleTime += (float)delta;
         ApplyIdlePose();
+        if (_ritualTaps is 1 or 2 && !_ritualLocked)
+        {
+            var elapsed = (Time.GetTicksMsec() - _ritualLastTapMsec) / 1000.0;
+            if (elapsed > RitualMaxGap)
+                _ = RejectRitualAsync();
+        }
     }
 
     public override void _Notification(int what)
@@ -219,19 +231,25 @@ public partial class MainScene : Control
         _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.78f));
         _askHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _askHint.MouseFilter = MouseFilterEnum.Ignore;
-        _askHint.MaxLinesVisible = 2;
+        _askHint.MaxLinesVisible = 4;
         _askHint.Visible = false;
         var hintRng = new RandomNumberGenerator();
         hintRng.Randomize();
-        _askHint.Text = AskFocusCatalog.Pick(hintRng);
+        _ritualHintText = AskFocusCatalog.Pick(hintRng);
+        _askHint.Text = _ritualHintText;
 
-        _ask = UiTheme.MakeButton("Спросить", 24);
-        _ask.CustomMinimumSize = new Vector2(0, 64);
-        _ask.Disabled = true;
-        _ask.Pressed += OnActionPressed;
+        _askTapHint = UiTheme.MakeLabel(
+            "и прикоснись три раза к шару-оракулу",
+            24,
+            new Color(UiTheme.Gold.R, UiTheme.Gold.G, UiTheme.Gold.B, 0.92f));
+        _askTapHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _askTapHint.MouseFilter = MouseFilterEnum.Ignore;
+        _askTapHint.MaxLinesVisible = 3;
+        _askTapHint.Visible = false;
+        _askTapHint.CustomMinimumSize = new Vector2(0, 64);
 
         var askBlock = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        askBlock.AddThemeConstantOverride("separation", 0);
+        askBlock.AddThemeConstantOverride("separation", 8);
         _askHintGap = new Control
         {
             MouseFilter = MouseFilterEnum.Ignore,
@@ -240,7 +258,7 @@ public partial class MainScene : Control
         };
         askBlock.AddChild(_askHint);
         askBlock.AddChild(_askHintGap);
-        askBlock.AddChild(_ask);
+        askBlock.AddChild(_askTapHint);
         bottom.AddChild(askBlock);
 
         var footer = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
@@ -374,7 +392,7 @@ public partial class MainScene : Control
 
     private void OnBallGuiInput(InputEvent @event)
     {
-        if (!_introFinished || !_ball.Visible)
+        if (!_introFinished || !_ball.Visible || RitualTapsBlocked())
             return;
 
         var localEvent = _ball.MakeInputLocal(@event);
@@ -397,6 +415,92 @@ public partial class MainScene : Control
         if (_ball.Material is ShaderMaterial mat)
             _ballRipples.Tick(0, mat);
         _ball.AcceptEvent();
+        RegisterRitualTap();
+    }
+
+    private bool RitualTapsBlocked()
+    {
+        return _ritualLocked
+            || _step != OracleStep.Ask
+            || _sheet is { Visible: true }
+            || _casting is { Visible: true }
+            || _ads is { Visible: true }
+            || _modal is { Visible: true }
+            || _permissionsOnboarding is { Visible: true };
+    }
+
+    private void RegisterRitualTap()
+    {
+        if (RitualTapsBlocked())
+            return;
+
+        var now = Time.GetTicksMsec();
+        if (_ritualTaps == 0)
+        {
+            _ritualTaps = 1;
+            _ritualLastTapMsec = now;
+            RestoreRitualHint();
+            SetBallLook(BallLook.Idle);
+            return;
+        }
+
+        var gap = (now - _ritualLastTapMsec) / 1000.0;
+        if (gap < RitualMinGap || gap > RitualMaxGap)
+        {
+            _ = RejectRitualAsync();
+            return;
+        }
+
+        _ritualTaps++;
+        _ritualLastTapMsec = now;
+        if (_ritualTaps >= 3)
+        {
+            ResetRitualTaps();
+            OnActionPressed();
+        }
+    }
+
+    private void ResetRitualTaps()
+    {
+        _ritualTaps = 0;
+        _ritualLastTapMsec = 0;
+    }
+
+    private void RestoreRitualHint()
+    {
+        if (_askHint != null && !string.IsNullOrEmpty(_ritualHintText))
+            _askHint.Text = _ritualHintText;
+    }
+
+    private async Task RejectRitualAsync()
+    {
+        if (_ritualLocked || _step != OracleStep.Ask)
+            return;
+
+        _ritualLocked = true;
+        ResetRitualTaps();
+        if (_askHint != null)
+        {
+            var rng = new RandomNumberGenerator();
+            rng.Randomize();
+            _askHint.Text = OracleUnreadyCatalog.Pick(rng);
+        }
+
+        SetSunActive(false);
+        SetBallLook(BallLook.Fog);
+        _sparks.SetAsking(false);
+
+        try
+        {
+            await YandexAdsGate.ShowRequiredRewardedAsync(this, _ads);
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[MainScene] ritual reject ads: {ex.Message}");
+        }
+
+        _ritualLocked = false;
+        RefreshActionButton();
     }
 
     private void PrewarmVortex() => _vortex?.Prewarm();
@@ -414,25 +518,27 @@ public partial class MainScene : Control
 
     private void RefreshActionButton()
     {
-        if (_ask == null)
-            return;
-
-        _ask.Text = "Спросить";
         var sheetOpen = _sheet is { Visible: true } || _casting is { Visible: true };
-        _ask.Visible = _introFinished && !sheetOpen;
-        _ask.Disabled = !_introFinished || _step == OracleStep.Busy || _askSettling || sheetOpen;
+        var hintsOn = _introFinished && !sheetOpen && _step == OracleStep.Ask;
         if (_askHint != null)
-            _askHint.Visible = _ask.Visible && _step == OracleStep.Ask;
+            _askHint.Visible = hintsOn;
+        if (_askTapHint != null)
+            _askTapHint.Visible = hintsOn;
         if (_askHintGap != null)
-            _askHintGap.Visible = _ask.Visible;
+            _askHintGap.Visible = _introFinished && !sheetOpen;
         CacheAskBottom();
     }
 
     private void CacheAskBottom()
     {
-        if (_ask == null || !_ask.IsVisibleInTree() || _ask.Size.Y < 8f)
+        if (_askTapHint != null && _askTapHint.IsVisibleInTree() && _askTapHint.Size.Y >= 8f)
+        {
+            _askBottomY = _askTapHint.GetGlobalRect().End.Y;
             return;
-        _askBottomY = _ask.GetGlobalRect().End.Y;
+        }
+
+        if (_askHint != null && _askHint.IsVisibleInTree() && _askHint.Size.Y >= 8f)
+            _askBottomY = _askHint.GetGlobalRect().End.Y;
     }
 
     private void LayoutReadingSheet()
@@ -461,8 +567,8 @@ public partial class MainScene : Control
         var ballBottom = _ballTarget.Y + _ball.Size.Y;
         var top = ballBottom + gapToBall;
         var bottom = _askBottomY;
-        if (bottom < 8f && _ask != null && _ask.IsVisibleInTree())
-            bottom = _ask.GetGlobalRect().End.Y;
+        if (bottom < 8f && _askTapHint != null && _askTapHint.IsVisibleInTree())
+            bottom = _askTapHint.GetGlobalRect().End.Y;
         if (bottom < 8f)
         {
             var vp = GetViewportRect().Size.Y;
@@ -549,7 +655,7 @@ public partial class MainScene : Control
 
     private async void OnActionPressed()
     {
-        if (!_introFinished || _step == OracleStep.Busy || _askSettling)
+        if (!_introFinished || _step == OracleStep.Busy || _ritualLocked)
             return;
 
         if (ProfileStore.Current is not { IsComplete: true } profile)
@@ -558,6 +664,8 @@ public partial class MainScene : Control
             return;
         }
 
+        ResetRitualTaps();
+        _ritualLocked = true;
         _step = OracleStep.Busy;
         RefreshActionButton();
         _lastResult = null;
@@ -698,22 +806,24 @@ public partial class MainScene : Control
         SetBallLook(BallLook.Idle);
         _sparks.SetAsking(false);
         _step = OracleStep.Ask;
+        _ritualLocked = false;
         _askSettling = true;
         _askSettleTween?.Kill();
+        RestoreRitualHint();
         RefreshActionButton();
         var faded = new Color(1f, 1f, 1f, 0.32f);
-        if (_ask != null)
-            _ask.Modulate = faded;
         if (_askHint != null)
             _askHint.Modulate = faded;
+        if (_askTapHint != null)
+            _askTapHint.Modulate = faded;
 
         _askSettleTween = CreateTween();
         _askSettleTween.SetEase(Tween.EaseType.Out);
         _askSettleTween.SetTrans(Tween.TransitionType.Sine);
-        if (_ask != null)
-            _askSettleTween.TweenProperty(_ask, "modulate", Colors.White, SunFadeSeconds);
         if (_askHint != null)
             _askSettleTween.TweenProperty(_askHint, "modulate", Colors.White, SunFadeSeconds);
+        if (_askTapHint != null)
+            _askSettleTween.TweenProperty(_askTapHint, "modulate", Colors.White, SunFadeSeconds);
 
         _sun?.FadeOut(SunFadeSeconds, OnSunFadeFinished);
     }
@@ -723,10 +833,10 @@ public partial class MainScene : Control
         if (!_askSettling)
             return;
         _askSettling = false;
-        if (_ask != null)
-            _ask.Modulate = Colors.White;
         if (_askHint != null)
             _askHint.Modulate = Colors.White;
+        if (_askTapHint != null)
+            _askTapHint.Modulate = Colors.White;
         RefreshActionButton();
     }
 
@@ -774,8 +884,6 @@ public partial class MainScene : Control
             && !string.Equals(photo.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
         await casting.ReportAsync(CastingStage.PhotoScan, photo.FromGallery);
         await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk);
-        // Палитра в промпт больше не уходит.
-        await casting.ReportAsync(CastingStage.PhotoPalette, false);
         await casting.ReportAsync(CastingStage.PhotoLuminance, Ok(photo.LuminanceVibe));
 
         var context = _context.Assemble(profile, photo);

@@ -10,7 +10,6 @@ namespace CrystalBall.Vision;
 public readonly record struct PhotoFrame(
     string RawTag,
     string MysticTag,
-    Dictionary<string, int> Palette,
     double Luminance);
 
 /// <summary>
@@ -34,7 +33,6 @@ public static class PhotoSampler
             var mysticOk = !string.IsNullOrWhiteSpace(analysis.MysticTag)
                 && !string.Equals(analysis.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
             await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk).ConfigureAwait(true);
-            await casting.ReportAsync(CastingStage.PhotoPalette, inPrompt: false).ConfigureAwait(true);
             await casting.ReportAsync(CastingStage.PhotoLuminance, !string.IsNullOrWhiteSpace(analysis.LuminanceVibe))
                 .ConfigureAwait(true);
         }
@@ -199,22 +197,22 @@ public static class PhotoSampler
     {
         var visualsTask = Task.Run(() =>
         {
-            var (palette, luminance) = ImagePreprocessor.SampleVisualsFromRgb(
+            var luminance = ImagePreprocessor.SampleLuminanceFromRgb(
                 prepared.Rgb224, prepared.Width, prepared.Height);
             var tensor = ImagePreprocessor.ToNchwTensorFromRgb(prepared.Rgb224, prepared.Width, prepared.Height);
-            return (palette, luminance, tensor);
+            return (luminance, tensor);
         });
 
-        var (palette, luminance, tensor) = await visualsTask.ConfigureAwait(true);
+        var (luminance, tensor) = await visualsTask.ConfigureAwait(true);
 
         if (worker == null || engine is not { IsAvailable: true })
         {
             var aura = AuraMystic(luminance);
-            return new PhotoFrame("luminance aura", aura, palette, luminance);
+            return new PhotoFrame("luminance aura", aura, luminance);
         }
 
         var outcome = await worker.RunDetailedAsync(tensor).ConfigureAwait(true);
-        return new PhotoFrame(outcome.EnglishTag, outcome.MysticTag, palette, luminance);
+        return new PhotoFrame(outcome.EnglishTag, outcome.MysticTag, luminance);
     }
 
     private static async Task YieldFrameAsync()

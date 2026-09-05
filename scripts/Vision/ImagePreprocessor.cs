@@ -151,33 +151,28 @@ public sealed class ImagePreprocessor
 
     public PhotoAnalysis Describe(Image source, string rawTag, string mysticTag)
     {
-        var (palette, luminance) = SampleVisuals(source);
+        var luminance = SampleVisuals(source);
         return new PhotoAnalysis
         {
             RawTag = rawTag,
             MysticTag = mysticTag,
-            ColorPalette = FormatPalette(palette),
             LuminanceVibe = FormatLuminance(luminance),
         };
     }
 
-    public (Dictionary<string, int> Palette, double Luminance) SampleVisuals(Image source)
+    public double SampleVisuals(Image source)
     {
         using var work = new Image();
         work.CopyFrom(source);
         work.Resize(32, 32, Image.Interpolation.Nearest);
         if (work.GetFormat() != Image.Format.Rgb8)
             work.Convert(Image.Format.Rgb8);
-        return SampleVisualsFromRgb(work.GetData(), work.GetWidth(), work.GetHeight());
+        return SampleLuminanceFromRgb(work.GetData(), work.GetWidth(), work.GetHeight());
     }
 
-    public static (Dictionary<string, int> Palette, double Luminance) SampleVisualsFromRgb(
-        byte[] pixels, int width, int height)
+    public static double SampleLuminanceFromRgb(byte[] pixels, int width, int height)
     {
-        var buckets = new Dictionary<string, int>();
         double sum = 0;
-        var count = Math.Max(1, width * height);
-        // Даунсэмпл до ~32×32 без Godot Image — безопасно в фоне.
         var stepX = Math.Max(1, width / 32);
         var stepY = Math.Max(1, height / 32);
         var samples = 0;
@@ -189,15 +184,12 @@ public sealed class ImagePreprocessor
                 var r = pixels[src] / 255f;
                 var g = pixels[src + 1] / 255f;
                 var b = pixels[src + 2] / 255f;
-                var color = new Color(r, g, b);
-                var name = NameColor(color);
-                buckets[name] = buckets.GetValueOrDefault(name) + 1;
-                sum += color.Luminance;
+                sum += new Color(r, g, b).Luminance;
                 samples++;
             }
         }
 
-        return (buckets, sum / Math.Max(samples, 1));
+        return sum / Math.Max(samples, 1);
     }
 
     public static PhotoAnalysis Merge(IReadOnlyList<PhotoFrame> frames, bool fromGallery = false)
@@ -207,24 +199,17 @@ public sealed class ImagePreprocessor
             {
                 RawTag = "unknown object",
                 MysticTag = MysticTagConverter.UnknownArchetype,
-                ColorPalette = "глубокий черный",
                 LuminanceVibe = FormatLuminance(0),
             };
 
-        var palette = new Dictionary<string, int>();
         double lum = 0;
         foreach (var frame in frames)
-        {
             lum += frame.Luminance;
-            foreach (var (name, votes) in frame.Palette)
-                palette[name] = palette.GetValueOrDefault(name) + votes;
-        }
 
         return new PhotoAnalysis
         {
             RawTag = VoteNewestWins(frames.Select(f => f.RawTag), skip: "unknown object"),
             MysticTag = VoteNewestWins(frames.Select(f => f.MysticTag), skip: MysticTagConverter.UnknownArchetype),
-            ColorPalette = FormatPalette(palette),
             LuminanceVibe = FormatLuminance(lum / frames.Count),
             FromGallery = fromGallery,
         };
@@ -367,12 +352,6 @@ public sealed class ImagePreprocessor
         return image;
     }
 
-    private static string FormatPalette(Dictionary<string, int> buckets)
-    {
-        var top = buckets.OrderByDescending(pair => pair.Value).Take(3).Select(pair => pair.Key);
-        return string.Join(", ", top);
-    }
-
     public static string FormatLuminance(double mean) =>
         mean >= 0.45
             ? "Яркий свет (ясность мотивов)"
@@ -403,28 +382,5 @@ public sealed class ImagePreprocessor
         }
 
         return winner;
-    }
-
-    private static string NameColor(Color color)
-    {
-        if (color.Luminance < 0.12f)
-            return "глубокий черный";
-        if (color.Luminance > 0.88f)
-            return "холодный белый";
-
-        var h = color.H;
-        if (h < 0.05f || h >= 0.95f)
-            return "неоновый алый";
-        if (h < 0.12f)
-            return "малиновый";
-        if (h < 0.18f)
-            return "янтарное золото";
-        if (h < 0.35f)
-            return "изумрудный";
-        if (h < 0.55f)
-            return "глубокий бирюзовый";
-        if (h < 0.75f)
-            return "фиолетовый";
-        return "пурпурный";
     }
 }
