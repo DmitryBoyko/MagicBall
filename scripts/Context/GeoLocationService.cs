@@ -55,12 +55,24 @@ public static class GeoLocationService
         _warmup = ResolveStartupAsync();
     }
 
-    /// <summary>«Спросить»: только уже накопленное. GPS крутится в Warmup с запуска.</summary>
+    /// <summary>«Спросить»: как домик в LBSDetector — читаем live-фикс потока, без ожидания GPS.</summary>
     public static Task<string> ResolveForAskAsync()
     {
         LoadDiskCache();
+        GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName)?.Call("kick");
+        var fix = ReadAndroidFix();
+        if (fix != null)
+        {
+            LastCoords = (fix.Value.Lat, fix.Value.Lon);
+            LastAccuracyMeters = fix.Value.AccuracyMeters;
+            if (!HasSettlement)
+                Store(PhraseFromCoords(fix.Value.Lat, fix.Value.Lon));
+            Warmup();
+            return Task.FromResult(Settlement);
+        }
+
         Warmup();
-        return Task.FromResult(IsFresh() || HasSettlement ? Settlement : "");
+        return Task.FromResult(HasSettlement ? Settlement : "");
     }
 
     private static async Task<string> ResolveStartupAsync()

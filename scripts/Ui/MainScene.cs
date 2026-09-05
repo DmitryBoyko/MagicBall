@@ -746,7 +746,7 @@ public partial class MainScene : Control
     private async Task<OracleResult> RunOracleAsync(UserProfile profile)
     {
         var casting = new CastingProgress(_casting, GetTree());
-        var geoTask = GeoLocationService.ResolveForAskAsync();
+        _ = GeoLocationService.ResolveForAskAsync();
         var weatherTask = WeatherService.ResolveForAskAsync();
 
         static bool Ok(string? value) => !string.IsNullOrWhiteSpace(value);
@@ -758,9 +758,7 @@ public partial class MainScene : Control
 
         var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
 
-        var geo = GeoLocationService.HasSettlement
-            ? GeoLocationService.Settlement
-            : await geoTask;
+        var geo = await GeoLocationService.ResolveForAskAsync();
         await casting.ReportAsync(CastingStage.Geo, Ok(geo));
 
         var weather = await weatherTask;
