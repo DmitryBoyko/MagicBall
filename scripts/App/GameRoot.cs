@@ -28,6 +28,7 @@ public partial class GameRoot : Node
         Gateway = new AiGateway(Config);
         CallDeferred(MethodName.WarmupDeferred);
         CallDeferred(MethodName.ProbeSafeArea);
+        CallDeferred(MethodName.EnsureLocationHost);
         CallDeferred(MethodName.WarmupLocation);
         if (OS.GetName() == "Android")
         {
@@ -42,6 +43,8 @@ public partial class GameRoot : Node
         if (what == NotificationApplicationFocusIn)
         {
             ProbeSafeArea();
+            EnsureLocationHost();
+            GetNodeOrNull(LocationHostName)?.Call("kick");
             GeoLocationService.Warmup();
             WeatherService.Warmup();
             // Обновить самый свежий кадр, если пользователь вернулся из галереи.
@@ -59,8 +62,32 @@ public partial class GameRoot : Node
         SafeAreaHelper.RelayoutTree(GetTree());
     }
 
+    public const string LocationHostName = "AndroidLocationHost";
+    public const string LocationScriptPath = "res://scripts/Context/android_location.gd";
+
+    private void EnsureLocationHost()
+    {
+        if (OS.GetName() != "Android")
+            return;
+        if (GetNodeOrNull(LocationHostName) != null)
+            return;
+        if (!ResourceLoader.Exists(LocationScriptPath) && !FileAccess.FileExists(LocationScriptPath))
+            return;
+
+        var script = GD.Load<GDScript>(LocationScriptPath);
+        if (script == null)
+            return;
+
+        var host = new Node { Name = LocationHostName };
+        host.SetScript(script);
+        AddChild(host);
+        host.Call("kick");
+    }
+
     private void WarmupLocation()
     {
+        EnsureLocationHost();
+        GetNodeOrNull(LocationHostName)?.Call("kick");
         GeoLocationService.Warmup();
         WeatherService.Warmup();
     }

@@ -12,13 +12,13 @@ namespace CrystalBall.Context;
 public static class GeoLocationService
 {
     public const double MaxSeconds = 3;
-    /// <summary>Отсекает грубые network/IP-подобные фиксы (сотни км).</summary>
-    public const double MaxAccuracyMeters = 2000;
+    /// <summary>Городской масштаб; сотни км (IP-like) отсекаем.</summary>
+    public const double MaxAccuracyMeters = 15000;
 
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan MissTtl = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(25);
     /// <summary>На «Спросить» не ждём полный reverse-geocode — только кэш / короткий join.</summary>
     public static readonly TimeSpan AskJoinBudget = TimeSpan.FromMilliseconds(280);
 
@@ -142,24 +142,20 @@ public static class GeoLocationService
 
             if (fix == null)
             {
-                MarkMiss();
+                GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName)?.Call("kick");
                 return "";
             }
 
             LastCoords = (fix.Value.Lat, fix.Value.Lon);
             LastAccuracyMeters = fix.Value.AccuracyMeters;
+            Store(PhraseFromCoords(fix.Value.Lat, fix.Value.Lon));
 
             var named = await ReverseGeocodeAsync(fix.Value.Lat, fix.Value.Lon, cancellationToken)
                 .ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(named))
-            {
                 Store(named);
-                return Settlement;
-            }
 
-            // Reverse пустой — город в промпт не подставляем (IP-fallback убран).
-            MarkMiss();
-            return "";
+            return Settlement;
         }
         finally
         {
@@ -198,17 +194,30 @@ public static class GeoLocationService
         return null;
     }
 
+    private static string PhraseFromCoords(double lat, double lon)
+    {
+        var type = ComposeTerrain("местность", null, lat, lon);
+        return string.IsNullOrWhiteSpace(type) ? "местность" : type;
+    }
+
     private static (double Lat, double Lon, double AccuracyMeters)? ReadAndroidFix()
     {
         if (OS.GetName() != "Android")
             return null;
 
-        var script = GD.Load<GDScript>("res://scripts/Context/android_location.gd");
-        if (script == null)
-            return null;
+        Variant raw = default;
+        var host = GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName);
+        if (host != null)
+            raw = host.Call("probe");
+        else
+        {
+            var script = GD.Load<GDScript>(GameRoot.LocationScriptPath);
+            if (script == null)
+                return null;
+            var instance = script.New().AsGodotObject();
+            raw = instance.Call("probe");
+        }
 
-        var instance = script.New().AsGodotObject();
-        var raw = instance.Call("probe");
         if (raw.VariantType != Variant.Type.Dictionary)
             return null;
 
@@ -221,8 +230,10 @@ public static class GeoLocationService
         if (Math.Abs(lat) < 0.0001 && Math.Abs(lon) < 0.0001)
             return null;
 
-        var accuracy = dict.ContainsKey("accuracy") ? dict["accuracy"].AsDouble() : double.MaxValue;
-        if (accuracy <= 0 || accuracy > MaxAccuracyMeters)
+        var accuracy = dict.ContainsKey("accuracy") ? dict["accuracy"].AsDouble() : 50;
+        if (accuracy <= 0)
+            accuracy = 50;
+        if (accuracy > MaxAccuracyMeters)
         {
             GD.Print($"[GeoLocation] fix rejected accuracy={accuracy:F0}m (max {MaxAccuracyMeters})");
             return null;
