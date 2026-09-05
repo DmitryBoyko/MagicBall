@@ -70,6 +70,8 @@ public partial class MainScene : Control
     private const float BallAskLift = 0.38f;
     private const float RitualMinGap = 0.5f;
     private const float RitualMaxGap = 1.0f;
+    /// <summary>Один палец = ScreenTouch + MouseButton (emulate_*). Не считать эхо вторым касанием.</summary>
+    private const ulong RitualEchoMsec = 120;
     private readonly BallRipples _ballRipples = new();
 
     public override void _Ready()
@@ -394,13 +396,7 @@ public partial class MainScene : Control
         if (!_introFinished || !_ball.Visible || RitualTapsBlocked())
             return;
 
-        var localEvent = _ball.MakeInputLocal(@event);
-        Vector2 local;
-        if (localEvent is InputEventScreenTouch { Pressed: true } touch)
-            local = touch.Position;
-        else if (localEvent is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mouse)
-            local = mouse.Position;
-        else
+        if (!TryRitualPointer(_ball.MakeInputLocal(@event), out var local))
             return;
 
         var size = _ball.Size;
@@ -415,6 +411,22 @@ public partial class MainScene : Control
             _ballRipples.Tick(0, mat);
         _ball.AcceptEvent();
         RegisterRitualTap();
+    }
+
+    /// <summary>
+    /// Только палец 0 / ScreenTouch. Mouse игнорируем: при emulate_touch_from_mouse
+    /// и дефолтном emulate_mouse_from_touch один тап приходит дважды и ломал ритм.
+    /// </summary>
+    private static bool TryRitualPointer(InputEvent @event, out Vector2 local)
+    {
+        local = default;
+        if (@event is InputEventScreenTouch touch && touch.Pressed && touch.Index == 0)
+        {
+            local = touch.Position;
+            return true;
+        }
+
+        return false;
     }
 
     private bool RitualTapsBlocked()
@@ -434,6 +446,13 @@ public partial class MainScene : Control
             return;
 
         var now = Time.GetTicksMsec();
+        if (_ritualTaps > 0)
+        {
+            var echo = now - _ritualLastTapMsec;
+            if (echo < RitualEchoMsec)
+                return;
+        }
+
         if (_ritualTaps == 0)
         {
             _ritualTaps = 1;
