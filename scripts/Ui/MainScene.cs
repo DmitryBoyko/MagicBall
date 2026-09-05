@@ -766,8 +766,7 @@ public partial class MainScene : Control
         var photo = await photoTask;
         var mysticOk = Ok(photo.MysticTag)
             && !string.Equals(photo.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
-        var scanOk = mysticOk || (Ok(photo.RawTag) && photo.RawTag != "unknown object");
-        await casting.ReportAsync(CastingStage.PhotoScan, scanOk);
+        await casting.ReportAsync(CastingStage.PhotoScan, photo.FromGallery);
         await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk);
         // Палитра в промпт больше не уходит.
         await casting.ReportAsync(CastingStage.PhotoPalette, false);

@@ -26,13 +26,11 @@ public static class PhotoSampler
 
     public static async Task<PhotoAnalysis> AnalyzeRecentAsync(CastingProgress? casting = null)
     {
-        if (casting != null)
-            await casting.ReportAsync(CastingStage.PhotoScan, inPrompt: true).ConfigureAwait(true);
-
         var analysis = await AnalyzeRecentCoreAsync().ConfigureAwait(true);
 
         if (casting != null)
         {
+            await casting.ReportAsync(CastingStage.PhotoScan, analysis.FromGallery).ConfigureAwait(true);
             var mysticOk = !string.IsNullOrWhiteSpace(analysis.MysticTag)
                 && !string.Equals(analysis.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
             await casting.ReportAsync(CastingStage.PhotoMystic, mysticOk).ConfigureAwait(true);
@@ -147,17 +145,17 @@ public static class PhotoSampler
         }
 
         if (frames.Count > 0)
-            return ImagePreprocessor.Merge(frames);
+            return ImagePreprocessor.Merge(frames, fromGallery: true);
 
         await YieldFrameAsync().ConfigureAwait(true);
         const string fallbackKey = "__fallback__";
         if (TryGetCached(fallbackKey, out var fallbackCached))
-            return ImagePreprocessor.Merge([fallbackCached]);
+            return ImagePreprocessor.Merge([fallbackCached], fromGallery: false);
 
         var fallback = preprocessor.PrepareFallbackFrame();
         var fallbackFrame = await AnalyzePreparedAsync(worker, engine, fallback).ConfigureAwait(true);
         Remember(fallbackKey, fallbackFrame);
-        return ImagePreprocessor.Merge([fallbackFrame]);
+        return ImagePreprocessor.Merge([fallbackFrame], fromGallery: false);
     }
 
     private static bool TryGetCached(string path, out PhotoFrame frame)

@@ -353,8 +353,14 @@ public partial class PermissionsOnboardingModal : CanvasLayer
 
     private void OpenSystemSettingsDeferred()
     {
-        if (!AppPermissions.OpenSystemSettings())
+        if (!AppPermissions.OpenSystemSettings(this))
             GD.PushWarning("[PermissionsOnboarding] не удалось открыть системные настройки");
+    }
+
+    public void _on_android_settings_result(bool ok)
+    {
+        if (!ok)
+            GD.PushWarning("[PermissionsOnboarding] системные настройки не открылись");
     }
 
     private void Dismiss()

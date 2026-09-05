@@ -74,7 +74,7 @@ public static class AppPermissions
         return Check().AllGranted;
     }
 
-    public static bool OpenSystemSettings()
+    public static bool OpenSystemSettings(Node? host = null)
     {
         if (!IsAndroid)
         {
@@ -97,21 +97,14 @@ public static class AppPermissions
                 return false;
             }
 
-            // Сначала static (без временного RefCounted); иначе instance.Call.
-            var fromStatic = script.Call("open_details_static");
-            if (fromStatic.VariantType != Variant.Type.Nil)
-            {
-                var okStatic = fromStatic.AsBool();
-                GD.Print($"[AppPermissions] OpenSystemSettings static → {okStatic}");
-                if (okStatic)
-                    return true;
-            }
-
             var instance = script.New().AsGodotObject();
             if (instance == null)
                 return false;
 
-            var ok = instance.Call("open_details").AsBool();
+            // Не script.Call(static): в C# это часто Method not found → catch, без fallback.
+            var ok = host != null
+                ? instance.Call("open_on_ui_thread", host).AsBool()
+                : instance.Call("open_details").AsBool();
             GD.Print($"[AppPermissions] OpenSystemSettings → {ok}");
             return ok;
         }

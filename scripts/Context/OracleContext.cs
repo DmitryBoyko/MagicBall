@@ -106,4 +106,6 @@ public sealed class PhotoAnalysis
     public string MysticTag { get; set; } = string.Empty;
     public string ColorPalette { get; set; } = string.Empty;
     public string LuminanceVibe { get; set; } = string.Empty;
+    /// <summary>true — брали кадры из галереи (этап PhotoScan в промпте).</summary>
+    public bool FromGallery { get; set; }
 }

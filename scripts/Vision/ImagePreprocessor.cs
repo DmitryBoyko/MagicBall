@@ -95,6 +95,13 @@ public sealed class ImagePreprocessor
     public async Task<List<string>> ListLatestGalleryPathsAsync(int take)
     {
         take = Math.Clamp(take, 1, AppConfig.MaxPhotoLookback);
+        if (OS.GetName() == "Android")
+        {
+            var media = AndroidMediaStoreBridge.ListRecentPaths(take);
+            if (media.Count > 0)
+                return media;
+        }
+
         var found = new List<(string Path, ulong Time)>();
         await CollectImagesAsync(OS.GetSystemDir(OS.SystemDir.Dcim), 0, found, stopAfter: 48).ConfigureAwait(true);
         await CollectImagesAsync(OS.GetSystemDir(OS.SystemDir.Pictures), 0, found, stopAfter: 48).ConfigureAwait(true);
@@ -193,7 +200,7 @@ public sealed class ImagePreprocessor
         return (buckets, sum / Math.Max(samples, 1));
     }
 
-    public static PhotoAnalysis Merge(IReadOnlyList<PhotoFrame> frames)
+    public static PhotoAnalysis Merge(IReadOnlyList<PhotoFrame> frames, bool fromGallery = false)
     {
         if (frames.Count == 0)
             return new PhotoAnalysis
@@ -219,6 +226,7 @@ public sealed class ImagePreprocessor
             MysticTag = VoteNewestWins(frames.Select(f => f.MysticTag)),
             ColorPalette = FormatPalette(palette),
             LuminanceVibe = FormatLuminance(lum / frames.Count),
+            FromGallery = fromGallery,
         };
     }
 
