@@ -69,7 +69,7 @@ public partial class MainScene : Control
     private const float BallIdleLift = 0.10f;
     private const float BallAskLift = 0.38f;
     private const float RitualMinGap = 0.5f;
-    private const float RitualMaxGap = 1.0f;
+    private const float RitualMaxGap = 2.2f;
     private readonly BallRipples _ballRipples = new();
 
     public override void _Ready()
@@ -129,13 +129,7 @@ public partial class MainScene : Control
             return;
         _idleTime += (float)delta;
         ApplyIdlePose();
-        if (_ritualTaps == 1 && !_ritualLocked)
-        {
-            var elapsed = (Time.GetTicksMsec() - _ritualLastTapMsec) / 1000.0;
-            if (elapsed > RitualMaxGap)
-                ResetRitualTaps();
-        }
-        else if (_ritualTaps == 2 && !_ritualLocked)
+        if (_ritualTaps == 2 && !_ritualLocked)
         {
             var elapsed = (Time.GetTicksMsec() - _ritualLastTapMsec) / 1000.0;
             if (elapsed > RitualMaxGap)
@@ -401,10 +395,13 @@ public partial class MainScene : Control
 
     private void OnBallGuiInput(InputEvent @event)
     {
-        if (!_introFinished || !_ball.Visible || RitualTapsBlocked())
+        if (!_introFinished || !_ball.Visible)
             return;
 
         if (!TryRitualPointer(_ball.MakeInputLocal(@event), out var local))
+            return;
+
+        if (RitualTapsBlocked())
             return;
 
         var size = _ball.Size;
@@ -455,7 +452,6 @@ public partial class MainScene : Control
         {
             _ritualTaps = 1;
             _ritualLastTapMsec = now;
-            GD.Print("[Ritual] tap 1");
             RestoreRitualHint();
             SetBallLook(BallLook.Idle);
             return;
@@ -464,24 +460,18 @@ public partial class MainScene : Control
         var gap = (now - _ritualLastTapMsec) / 1000.0;
         if (_ritualTaps == 1 && gap > RitualMaxGap)
         {
-            _ritualTaps = 1;
-            _ritualLastTapMsec = now;
-            GD.Print($"[Ritual] tap 1 restarted, previous gap={gap:F3}s");
-            RestoreRitualHint();
-            SetBallLook(BallLook.Idle);
+            _ = RejectRitualAsync();
             return;
         }
 
         if (gap < RitualMinGap || gap > RitualMaxGap)
         {
-            GD.Print($"[Ritual] rejected at tap {_ritualTaps + 1}, gap={gap:F3}s");
             _ = RejectRitualAsync();
             return;
         }
 
         _ritualTaps++;
         _ritualLastTapMsec = now;
-        GD.Print($"[Ritual] tap {_ritualTaps}, gap={gap:F3}s");
         if (_ritualTaps >= 3)
         {
             ResetRitualTaps();
