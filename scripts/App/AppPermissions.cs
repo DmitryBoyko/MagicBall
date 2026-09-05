@@ -19,8 +19,6 @@ public static class AppPermissions
     public const string ReadExternalStorage = "android.permission.READ_EXTERNAL_STORAGE";
     public const string ReadMediaUserSelected = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED";
 
-    private const string SettingsScriptPath = "res://scripts/App/android_app_settings.gd";
-
     public static bool IsAndroid => OS.GetName() == "Android";
 
     public static AppPermissionStatus Check()
@@ -82,29 +80,18 @@ public static class AppPermissions
             return false;
         }
 
-        if (!ResourceLoader.Exists(SettingsScriptPath) && !FileAccess.FileExists(SettingsScriptPath))
-        {
-            GD.PushWarning($"[AppPermissions] missing {SettingsScriptPath}");
-            return false;
-        }
-
         try
         {
-            var script = GD.Load<GDScript>(SettingsScriptPath);
-            if (script == null)
+            var opener = GameRoot.Instance?.SettingsHost;
+            if (opener == null)
             {
-                GD.PushWarning("[AppPermissions] settings script load failed");
+                GD.PushWarning("[AppPermissions] settings host missing");
                 return false;
             }
 
-            var instance = script.New().AsGodotObject();
-            if (instance == null)
-                return false;
-
-            // Не script.Call(static): в C# это часто Method not found → catch, без fallback.
             var ok = host != null
-                ? instance.Call("open_on_ui_thread", host).AsBool()
-                : instance.Call("open_details").AsBool();
+                ? opener.Call("open", host).AsBool()
+                : opener.Call("open").AsBool();
             GD.Print($"[AppPermissions] OpenSystemSettings → {ok}");
             return ok;
         }

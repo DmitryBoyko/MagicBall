@@ -222,8 +222,8 @@ public sealed class ImagePreprocessor
 
         return new PhotoAnalysis
         {
-            RawTag = VoteNewestWins(frames.Select(f => f.RawTag)),
-            MysticTag = VoteNewestWins(frames.Select(f => f.MysticTag)),
+            RawTag = VoteNewestWins(frames.Select(f => f.RawTag), skip: "unknown object"),
+            MysticTag = VoteNewestWins(frames.Select(f => f.MysticTag), skip: MysticTagConverter.UnknownArchetype),
             ColorPalette = FormatPalette(palette),
             LuminanceVibe = FormatLuminance(lum / frames.Count),
             FromGallery = fromGallery,
@@ -378,11 +378,14 @@ public sealed class ImagePreprocessor
             ? "Яркий свет (ясность мотивов)"
             : "Глубокий сумрак (скрытые тайны)";
 
-    private static string VoteNewestWins(IEnumerable<string> values)
+    private static string VoteNewestWins(IEnumerable<string> values, string? skip = null)
     {
-        var list = values.Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+        var list = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Where(v => skip == null || !string.Equals(v, skip, StringComparison.Ordinal))
+            .ToList();
         if (list.Count == 0)
-            return string.Empty;
+            return skip ?? string.Empty;
 
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var value in list)

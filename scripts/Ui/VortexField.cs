@@ -4,22 +4,26 @@ using Godot;
 namespace CrystalBall.Ui;
 
 /// <summary>
-/// Полноэкранный вихрь как TrueTaro LoadingMagicVortex: золотая/неоновая пыль, 3 центра, спад 0.95 с.
+/// Полноэкранный вихрь: психоделическая пыль, 3 центра, спад 0.95 с.
 /// </summary>
 public partial class VortexField : CanvasLayer
 {
-    private static readonly Color Gold = new(1f, 0.86f, 0.26f);
-    private static readonly Color GoldHot = new(1.15f, 0.95f, 0.45f);
-    private static readonly Color[] Neon =
+    private static readonly Color[] Psychedelic =
     [
-        new(0.05f, 1f, 0.92f),
-        new(0.15f, 0.75f, 1f),
-        new(0.72f, 0.25f, 1f),
-        new(1f, 0.2f, 0.85f),
-        new(0.2f, 1f, 0.45f),
-        new(1f, 0.95f, 0.25f),
-        new(1f, 0.45f, 0.15f),
+        new(1.15f, 0.05f, 0.95f),
+        new(0.15f, 1.1f, 1.05f),
+        new(0.55f, 1.15f, 0.12f),
+        new(0.45f, 0.12f, 1.2f),
+        new(1.2f, 0.18f, 0.55f),
+        new(1.15f, 0.55f, 0.05f),
+        new(0.12f, 0.45f, 1.2f),
+        new(1.2f, 1.05f, 0.15f),
+        new(0.85f, 0.05f, 1.15f),
+        new(0.05f, 1.15f, 0.55f),
     ];
+
+    private const float SizeSmall = 0.68f;
+    private const float SizeJitter = 0.18f;
 
     private const float Speed = 18f * (4f / 3f);
     private const float SwirlPeak = 640f * Speed;
@@ -35,6 +39,7 @@ public partial class VortexField : CanvasLayer
     private Vector2[] _pos = [];
     private Vector2[] _vel = [];
     private Color[] _baseCol = [];
+    private Color[] _shiftCol = [];
     private float[] _goldMix = [];
     private bool[] _becomesGold = [];
     private float[] _breakJitter = [];
@@ -288,6 +293,7 @@ public partial class VortexField : CanvasLayer
         _pos = new Vector2[n];
         _vel = new Vector2[n];
         _baseCol = new Color[n];
+        _shiftCol = new Color[n];
         _goldMix = new float[n];
         _becomesGold = new bool[n];
         _breakJitter = new float[n];
@@ -323,28 +329,36 @@ public partial class VortexField : CanvasLayer
     {
         if (_count >= _home.Length)
             return;
-        Color col;
-        var gold = true;
-        if (_rng.Randf() < 0.28f)
-        {
-            col = Neon[_rng.RandiRange(0, Neon.Length - 1)];
-            gold = _rng.Randf() < 0.62f;
-        }
-        else
-        {
-            col = Gold.Lerp(GoldHot, _rng.Randf());
-        }
+        var a = (int)_rng.RandiRange(0, Psychedelic.Length - 1);
+        var b = (a + 1 + (int)_rng.RandiRange(0, Psychedelic.Length - 2)) % Psychedelic.Length;
+        Color col = Psychedelic[a];
+        Color shift = Psychedelic[b];
+        var gold = _rng.Randf() < 0.55f;
 
         var i = _count++;
         _home[i] = home;
         _pos[i] = home;
         _vel[i] = Vector2.Zero;
         _baseCol[i] = col;
-        _goldMix[i] = gold ? 0.25f : 0f;
+        _shiftCol[i] = shift;
+        _goldMix[i] = gold ? 0.2f : 0f;
         _becomesGold[i] = gold;
         _breakJitter[i] = _rng.RandfRange(0f, AppConfig.VortexBurstSeconds * 0.85f);
         _turbPhase[i] = _rng.Randf() * Mathf.Tau;
-        _pxSize[i] = gold ? _rng.RandfRange(0.73f, 2.13f) : _rng.RandfRange(0.60f, 1.40f);
+        _pxSize[i] = SizeSmall * SizeTier() * _rng.RandfRange(1f - SizeJitter, 1f + SizeJitter);
+    }
+
+    /// <summary>40% мелкие (как сейчас), 20% ×2, 20% ×3, 20% ×4.</summary>
+    private float SizeTier()
+    {
+        var roll = _rng.Randf();
+        if (roll < 0.40f)
+            return 1f;
+        if (roll < 0.60f)
+            return 2f;
+        if (roll < 0.80f)
+            return 3f;
+        return 4f;
     }
 
     private Vector2 Force(Vector2 pos, float strength)
@@ -369,10 +383,13 @@ public partial class VortexField : CanvasLayer
     private Color ColorAt(int i)
     {
         var gm = _goldMix[i];
-        var col = _baseCol[i].Lerp(Gold, Mathf.Clamp(gm + 0.35f, 0f, 1f));
-        if (gm > 0.45f)
-            col = col.Lerp(GoldHot, (gm - 0.45f) * 0.85f);
-        var a = _coverAlpha * (0.62f + gm * 0.48f);
+        var pulse = 0.5f + 0.5f * Mathf.Sin(_elapsed * 3.4f + _turbPhase[i]);
+        var col = _baseCol[i].Lerp(_shiftCol[i], Mathf.Clamp(gm * 0.75f + pulse * 0.35f, 0f, 1f));
+        col = new Color(
+            Mathf.Min(col.R * (1.05f + gm * 0.35f), 1.35f),
+            Mathf.Min(col.G * (1.05f + gm * 0.35f), 1.35f),
+            Mathf.Min(col.B * (1.05f + gm * 0.35f), 1.35f));
+        var a = _coverAlpha * (0.70f + gm * 0.38f);
         if (_elapsed < AppConfig.VortexBurstSeconds)
             a *= 0.75f + 0.25f * Mathf.Clamp(_elapsed / AppConfig.VortexBurstSeconds, 0f, 1f);
         if (_windingDown)
@@ -420,8 +437,10 @@ public partial class VortexField : CanvasLayer
                 InitialVelocityMin = 12f,
                 InitialVelocityMax = 70f,
                 ScaleMin = 0.09f,
-                ScaleMax = 0.35f,
-                Color = new Color(1f, 0.88f, 0.32f, 0.92f),
+                ScaleMax = 1.40f,
+                Color = new Color(0.85f, 0.15f, 1f, 0.88f),
+                HueVariationMin = -0.45f,
+                HueVariationMax = 0.45f,
             },
             Emitting = true,
         };

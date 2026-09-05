@@ -26,7 +26,7 @@ uniform vec4 ripple7;
 
 const float RIPPLE_FREQ = 15.5;
 const float RIPPLE_SPEED = 0.24;
-const float RIPPLE_AMP = 0.042;
+const float RIPPLE_AMP = 0.085;
 const float RIPPLE_LIFE = 4.8;
 const float RIPPLE_ONSET = 0.34;
 const float RIPPLE_SPATIAL_DECAY = 1.05;

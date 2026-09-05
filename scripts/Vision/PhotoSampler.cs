@@ -119,14 +119,14 @@ public static class PhotoSampler
         if (engine is { IsInitialized: false })
             await engine.InitializeEngineAsync().ConfigureAwait(true);
 
-        InferenceWorker? worker = engine != null ? new InferenceWorker(engine) : null;
+        InferenceWorker? worker = engine is { IsAvailable: true } ? new InferenceWorker(engine) : null;
         var frames = new List<PhotoFrame>(paths.Count);
 
         foreach (var path in paths)
         {
             await YieldFrameAsync().ConfigureAwait(true);
 
-            if (TryGetCached(path, out var cached))
+            if (TryGetCached(path, out var cached) && !IsUnknownFrame(cached))
             {
                 frames.Add(cached);
                 continue;
@@ -139,7 +139,8 @@ public static class PhotoSampler
                 continue;
 
             var frame = await AnalyzePreparedAsync(worker, engine, prepared.Value).ConfigureAwait(true);
-            Remember(path, frame);
+            if (!IsUnknownFrame(frame))
+                Remember(path, frame);
             frames.Add(frame);
             await YieldFrameAsync().ConfigureAwait(true);
         }
@@ -149,7 +150,7 @@ public static class PhotoSampler
 
         await YieldFrameAsync().ConfigureAwait(true);
         const string fallbackKey = "__fallback__";
-        if (TryGetCached(fallbackKey, out var fallbackCached))
+        if (TryGetCached(fallbackKey, out var fallbackCached) && !IsUnknownFrame(fallbackCached))
             return ImagePreprocessor.Merge([fallbackCached], fromGallery: false);
 
         var fallback = preprocessor.PrepareFallbackFrame();
@@ -157,6 +158,15 @@ public static class PhotoSampler
         Remember(fallbackKey, fallbackFrame);
         return ImagePreprocessor.Merge([fallbackFrame], fromGallery: false);
     }
+
+    private static bool IsUnknownFrame(PhotoFrame frame) =>
+        string.Equals(frame.RawTag, "unknown object", StringComparison.Ordinal)
+        || string.Equals(frame.MysticTag, MysticTagConverter.UnknownArchetype, StringComparison.Ordinal);
+
+    private static string AuraMystic(double luminance) =>
+        luminance >= 0.45
+            ? "Сияющий Лик Стекла"
+            : "Теневой Лик Стекла";
 
     private static bool TryGetCached(string path, out PhotoFrame frame)
     {
@@ -199,8 +209,8 @@ public static class PhotoSampler
 
         if (worker == null || engine is not { IsAvailable: true })
         {
-            var unknown = "unknown object";
-            return new PhotoFrame(unknown, MysticTagConverter.Convert(unknown), palette, luminance);
+            var aura = AuraMystic(luminance);
+            return new PhotoFrame("luminance aura", aura, palette, luminance);
         }
 
         var outcome = await worker.RunDetailedAsync(tensor).ConfigureAwait(true);

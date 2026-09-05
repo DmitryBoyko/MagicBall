@@ -29,6 +29,7 @@ public partial class GameRoot : Node
         CallDeferred(MethodName.WarmupDeferred);
         CallDeferred(MethodName.ProbeSafeArea);
         CallDeferred(MethodName.EnsureLocationHost);
+        CallDeferred(MethodName.EnsureSettingsHost);
         CallDeferred(MethodName.WarmupLocation);
         if (OS.GetName() == "Android")
         {
@@ -64,6 +65,8 @@ public partial class GameRoot : Node
 
     public const string LocationHostName = "AndroidLocationHost";
     public const string LocationScriptPath = "res://scripts/Context/android_location.gd";
+    public const string SettingsHostName = "AndroidAppSettingsHost";
+    public const string SettingsScriptPath = "res://scripts/App/android_app_settings.gd";
 
     private void EnsureLocationHost()
     {
@@ -82,6 +85,33 @@ public partial class GameRoot : Node
         host.SetScript(script);
         AddChild(host);
         host.Call("kick");
+    }
+
+    public void EnsureSettingsHost()
+    {
+        if (OS.GetName() != "Android")
+            return;
+        if (GetNodeOrNull(SettingsHostName) != null)
+            return;
+        if (!ResourceLoader.Exists(SettingsScriptPath) && !FileAccess.FileExists(SettingsScriptPath))
+            return;
+
+        var script = GD.Load<GDScript>(SettingsScriptPath);
+        if (script == null)
+            return;
+
+        var host = new Node { Name = SettingsHostName };
+        host.SetScript(script);
+        AddChild(host);
+    }
+
+    public Node? SettingsHost
+    {
+        get
+        {
+            EnsureSettingsHost();
+            return GetNodeOrNull(SettingsHostName);
+        }
     }
 
     private void WarmupLocation()

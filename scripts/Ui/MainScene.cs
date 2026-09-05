@@ -203,13 +203,18 @@ public partial class MainScene : Control
         var bottom = new VBoxContainer
         {
             Alignment = BoxContainer.AlignmentMode.End,
+            MouseFilter = MouseFilterEnum.Ignore,
         };
         bottom.SetAnchorsPreset(LayoutPreset.FullRect);
         bottom.OffsetTop = 0;
         bottom.AddThemeConstantOverride("separation", 16);
         AddChild(bottom);
 
-        bottom.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
+        bottom.AddChild(new Control
+        {
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            MouseFilter = MouseFilterEnum.Ignore,
+        });
 
         _askHint = UiTheme.MakeLabel("", UiTheme.FontAskHint, new Color(UiTheme.Cream.R, UiTheme.Cream.G, UiTheme.Cream.B, 0.78f));
         _askHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -225,7 +230,7 @@ public partial class MainScene : Control
         _ask.Disabled = true;
         _ask.Pressed += OnActionPressed;
 
-        var askBlock = new VBoxContainer();
+        var askBlock = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         askBlock.AddThemeConstantOverride("separation", 0);
         _askHintGap = new Control
         {
@@ -238,19 +243,19 @@ public partial class MainScene : Control
         askBlock.AddChild(_ask);
         bottom.AddChild(askBlock);
 
-        var footer = new HBoxContainer();
+        var footer = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         footer.AddThemeConstantOverride("separation", 12);
         _gear = new SettingsGearButton();
         _gear.Pressed += () => _modal.Present(editMode: true);
         footer.AddChild(_gear);
-        footer.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
+        footer.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
         _otherApps = UiTheme.MakeQuietButton("Другие приложения", 22);
         _otherApps.CustomMinimumSize = new Vector2(0, 56);
         _otherApps.Pressed += OnOtherApps;
         footer.AddChild(_otherApps);
         bottom.AddChild(footer);
 
-        var pad = new MarginContainer();
+        var pad = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
         pad.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         RemoveChild(bottom);
         pad.AddChild(bottom);
@@ -372,10 +377,11 @@ public partial class MainScene : Control
         if (!_introFinished || !_ball.Visible)
             return;
 
+        var localEvent = _ball.MakeInputLocal(@event);
         Vector2 local;
-        if (@event is InputEventScreenTouch { Pressed: true } touch)
+        if (localEvent is InputEventScreenTouch { Pressed: true } touch)
             local = touch.Position;
-        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mouse)
+        else if (localEvent is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mouse)
             local = mouse.Position;
         else
             return;
