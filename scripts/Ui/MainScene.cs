@@ -70,8 +70,6 @@ public partial class MainScene : Control
     private const float BallAskLift = 0.38f;
     private const float RitualMinGap = 0.5f;
     private const float RitualMaxGap = 1.0f;
-    /// <summary>Один палец = ScreenTouch + MouseButton (emulate_*). Не считать эхо вторым касанием.</summary>
-    private const ulong RitualEchoMsec = 120;
     private readonly BallRipples _ballRipples = new();
 
     public override void _Ready()
@@ -149,6 +147,16 @@ public partial class MainScene : Control
     {
         if (what == NotificationResized)
             ApplySafeArea();
+        else if (what == NotificationApplicationFocusIn
+                 && _step == OracleStep.Ask
+                 && _sheet is not { Visible: true }
+                 && _casting is not { Visible: true })
+        {
+            // Android-реклама уводит приложение из фокуса. Даже если плагин потерял
+            // callback закрытия, ритуал не должен остаться заблокирован навсегда.
+            _ritualLocked = false;
+            ResetRitualTaps();
+        }
     }
 
     public void ApplySafeArea()
@@ -413,14 +421,11 @@ public partial class MainScene : Control
         RegisterRitualTap();
     }
 
-    /// <summary>
-    /// Только палец 0 / ScreenTouch. Mouse игнорируем: при emulate_touch_from_mouse
-    /// и дефолтном emulate_mouse_from_touch один тап приходит дважды и ломал ритм.
-    /// </summary>
+    /// <summary>Единый источник ритуала: touch. Mouse в редакторе эмулируется как touch настройкой проекта.</summary>
     private static bool TryRitualPointer(InputEvent @event, out Vector2 local)
     {
         local = default;
-        if (@event is InputEventScreenTouch touch && touch.Pressed && touch.Index == 0)
+        if (@event is InputEventScreenTouch { Pressed: true } touch && touch.Index == 0)
         {
             local = touch.Position;
             return true;
@@ -446,17 +451,11 @@ public partial class MainScene : Control
             return;
 
         var now = Time.GetTicksMsec();
-        if (_ritualTaps > 0)
-        {
-            var echo = now - _ritualLastTapMsec;
-            if (echo < RitualEchoMsec)
-                return;
-        }
-
         if (_ritualTaps == 0)
         {
             _ritualTaps = 1;
             _ritualLastTapMsec = now;
+            GD.Print("[Ritual] tap 1");
             RestoreRitualHint();
             SetBallLook(BallLook.Idle);
             return;
@@ -467,6 +466,7 @@ public partial class MainScene : Control
         {
             _ritualTaps = 1;
             _ritualLastTapMsec = now;
+            GD.Print($"[Ritual] tap 1 restarted, previous gap={gap:F3}s");
             RestoreRitualHint();
             SetBallLook(BallLook.Idle);
             return;
@@ -474,12 +474,14 @@ public partial class MainScene : Control
 
         if (gap < RitualMinGap || gap > RitualMaxGap)
         {
+            GD.Print($"[Ritual] rejected at tap {_ritualTaps + 1}, gap={gap:F3}s");
             _ = RejectRitualAsync();
             return;
         }
 
         _ritualTaps++;
         _ritualLastTapMsec = now;
+        GD.Print($"[Ritual] tap {_ritualTaps}, gap={gap:F3}s");
         if (_ritualTaps >= 3)
         {
             ResetRitualTaps();
