@@ -12,15 +12,17 @@ namespace CrystalBall.Context;
 public static class GeoLocationService
 {
     public const double MaxSeconds = 3;
+    /// <summary>Фон при старте: ждём первую точку дольше, чем на «Спросить».</summary>
+    public static readonly TimeSpan StartupFixWait = TimeSpan.FromSeconds(20);
     /// <summary>Городской масштаб; сотни км (IP-like) отсекаем.</summary>
     public const double MaxAccuracyMeters = 15000;
 
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; reverse-geocode)";
+    private const string CachePath = "user://geo_cache.json";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
     private static readonly TimeSpan MissTtl = TimeSpan.FromSeconds(25);
-    /// <summary>На «Спросить» не ждём полный reverse-geocode — только кэш / короткий join.</summary>
-    public static readonly TimeSpan AskJoinBudget = TimeSpan.FromMilliseconds(280);
+    public static readonly TimeSpan AskJoinBudget = TimeSpan.Zero;
 
     private static readonly System.Net.Http.HttpClient Http = CreateHttp();
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -29,6 +31,7 @@ public static class GeoLocationService
     private static DateTime _resolvedUtc = DateTime.MinValue;
     private static DateTime _missUtc = DateTime.MinValue;
     private static Task<string>? _warmup;
+    private static bool _diskLoaded;
 
     public static bool HasSettlement => !string.IsNullOrWhiteSpace(_settlement);
 
@@ -40,43 +43,41 @@ public static class GeoLocationService
 
     public static void Warmup()
     {
-        if (IsFreshMiss())
+        LoadDiskCache();
+        if (IsFresh())
+        {
+            WeatherService.Warmup();
             return;
-        if (_warmup == null || (_warmup.IsCompleted && !IsFresh()))
-            _warmup = ResolveAsync();
+        }
+
+        if (_warmup != null && !_warmup.IsCompleted)
+            return;
+        _warmup = ResolveStartupAsync();
     }
 
-    public static void RequestAndroidPermission() => AppPermissions.RequestMissing();
-
-    /// <summary>
-    /// Для ритуала «Спросить»: взять готовое или почти готовое, не блокируя на MaxSeconds.
-    /// </summary>
-    public static async Task<string> ResolveForAskAsync()
+    /// <summary>«Спросить»: только уже накопленное. GPS крутится в Warmup с запуска.</summary>
+    public static Task<string> ResolveForAskAsync()
     {
-        if (IsFresh())
-            return Settlement;
-        if (IsFreshMiss())
-            return "";
-
+        LoadDiskCache();
         Warmup();
-        var pending = _warmup;
-        if (pending == null)
-            return "";
+        return Task.FromResult(IsFresh() || HasSettlement ? Settlement : "");
+    }
 
-        if (pending.IsCompleted)
-            return IsFresh() ? Settlement : "";
-
-        var finished = await Task.WhenAny(pending, Task.Delay(AskJoinBudget)).ConfigureAwait(true);
-        if (finished != pending)
-            return IsFresh() ? Settlement : "";
-
+    private static async Task<string> ResolveStartupAsync()
+    {
+        using var gpsCts = new CancellationTokenSource(StartupFixWait);
         try
         {
-            return await pending.ConfigureAwait(true);
+            return await ResolveCoreAsync(gpsCts.Token, waitForFix: StartupFixWait).ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            return IsFresh() ? Settlement : "";
+            return IsFresh() || HasSettlement ? Settlement : "";
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[GeoLocation] {ex.Message}");
+            return IsFresh() || HasSettlement ? Settlement : "";
         }
     }
 
@@ -90,12 +91,11 @@ public static class GeoLocationService
         using var cts = new CancellationTokenSource(Budget);
         try
         {
-            return await ResolveCoreAsync(cts.Token).ConfigureAwait(false);
+            return await ResolveCoreAsync(cts.Token, waitForFix: Budget).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            MarkMiss();
-            return "";
+            return IsFresh() ? Settlement : "";
         }
         catch (Exception ex)
         {
@@ -128,7 +128,7 @@ public static class GeoLocationService
 
     private static void Reset() => MarkMiss();
 
-    private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken)
+    private static async Task<string> ResolveCoreAsync(CancellationToken cancellationToken, TimeSpan waitForFix)
     {
         await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -136,21 +136,18 @@ public static class GeoLocationService
             if (IsFresh())
                 return Settlement;
 
-            // Разрешения запрашивает UI (онбординг / настройки), не фоновый resolve.
-            var fix = ReadAndroidFix();
-            cancellationToken.ThrowIfCancellationRequested();
-
+            var fix = await WaitForFixAsync(waitForFix, cancellationToken).ConfigureAwait(false);
             if (fix == null)
-            {
-                GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName)?.Call("kick");
-                return "";
-            }
+                return HasSettlement ? Settlement : "";
 
             LastCoords = (fix.Value.Lat, fix.Value.Lon);
             LastAccuracyMeters = fix.Value.AccuracyMeters;
             Store(PhraseFromCoords(fix.Value.Lat, fix.Value.Lon));
+            WeatherService.Warmup();
 
-            var named = await ReverseGeocodeAsync(fix.Value.Lat, fix.Value.Lon, cancellationToken)
+            using var geoCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            geoCts.CancelAfter(Budget);
+            var named = await ReverseGeocodeAsync(fix.Value.Lat, fix.Value.Lon, geoCts.Token)
                 .ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(named))
                 Store(named);
@@ -163,17 +160,104 @@ public static class GeoLocationService
         }
     }
 
+    private static async Task<(double Lat, double Lon, double AccuracyMeters)?> WaitForFixAsync(
+        TimeSpan wait, CancellationToken cancellationToken)
+    {
+        GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName)?.Call("kick");
+        var fix = ReadAndroidFix();
+        if (fix != null)
+            return fix;
+
+        var deadline = DateTime.UtcNow + wait;
+        while (DateTime.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(180, cancellationToken).ConfigureAwait(false);
+            fix = ReadAndroidFix();
+            if (fix != null)
+                return fix;
+            GameRoot.Instance?.GetNodeOrNull(GameRoot.LocationHostName)?.Call("kick");
+        }
+
+        return null;
+    }
+
     private static void Store(string name)
     {
         _settlement = name.Trim();
         _resolvedUtc = HasSettlement ? DateTime.UtcNow : DateTime.MinValue;
         if (HasSettlement)
+        {
             _missUtc = DateTime.MinValue;
+            SaveDiskCache();
+        }
         else
         {
             LastCoords = null;
             LastAccuracyMeters = null;
             _missUtc = DateTime.UtcNow;
+        }
+    }
+
+    private sealed class GeoDiskCache
+    {
+        public double Lat { get; set; }
+        public double Lon { get; set; }
+        public double Accuracy { get; set; }
+        public string Settlement { get; set; } = "";
+        public DateTime Utc { get; set; }
+    }
+
+    private static void LoadDiskCache()
+    {
+        if (_diskLoaded)
+            return;
+        _diskLoaded = true;
+        try
+        {
+            if (!FileAccess.FileExists(CachePath))
+                return;
+            using var file = FileAccess.Open(CachePath, FileAccess.ModeFlags.Read);
+            if (file == null)
+                return;
+            var parsed = JsonSerializer.Deserialize<GeoDiskCache>(file.GetAsText());
+            if (parsed == null || string.IsNullOrWhiteSpace(parsed.Settlement))
+                return;
+            if (DateTime.UtcNow - parsed.Utc > CacheTtl)
+                return;
+            LastCoords = (parsed.Lat, parsed.Lon);
+            LastAccuracyMeters = parsed.Accuracy;
+            _settlement = parsed.Settlement.Trim();
+            _resolvedUtc = parsed.Utc;
+            _missUtc = DateTime.MinValue;
+            GD.Print($"[GeoLocation] disk cache age={(DateTime.UtcNow - parsed.Utc).TotalMinutes:F0}m");
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[GeoLocation] cache load: {ex.Message}");
+        }
+    }
+
+    private static void SaveDiskCache()
+    {
+        if (!HasSettlement || LastCoords == null)
+            return;
+        try
+        {
+            var payload = JsonSerializer.Serialize(new GeoDiskCache
+            {
+                Lat = LastCoords.Value.Lat,
+                Lon = LastCoords.Value.Lon,
+                Accuracy = LastAccuracyMeters ?? 0,
+                Settlement = Settlement,
+                Utc = _resolvedUtc == DateTime.MinValue ? DateTime.UtcNow : _resolvedUtc,
+            });
+            using var file = FileAccess.Open(CachePath, FileAccess.ModeFlags.Write);
+            file?.StoreString(payload);
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[GeoLocation] cache save: {ex.Message}");
         }
     }
 

@@ -26,11 +26,11 @@ public partial class GameRoot : Node
         AppSettingsStore.Load();
         ProfileStore.Load();
         Gateway = new AiGateway(Config);
-        CallDeferred(MethodName.WarmupDeferred);
-        CallDeferred(MethodName.ProbeSafeArea);
         CallDeferred(MethodName.EnsureLocationHost);
         CallDeferred(MethodName.EnsureSettingsHost);
         CallDeferred(MethodName.WarmupLocation);
+        CallDeferred(MethodName.ProbeSafeArea);
+        CallDeferred(MethodName.WarmupDeferred);
         if (OS.GetName() == "Android")
         {
             ScheduleInsetProbe(0.35);

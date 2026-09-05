@@ -758,7 +758,9 @@ public partial class MainScene : Control
 
         var photoTask = PhotoSampler.AnalyzeRecentCoreAsync();
 
-        var geo = await geoTask;
+        var geo = GeoLocationService.HasSettlement
+            ? GeoLocationService.Settlement
+            : await geoTask;
         await casting.ReportAsync(CastingStage.Geo, Ok(geo));
 
         var weather = await weatherTask;

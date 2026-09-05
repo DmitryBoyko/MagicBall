@@ -1,4 +1,5 @@
 using CrystalBall.App;
+using CrystalBall.Context;
 using Godot;
 
 namespace CrystalBall.Ui;
@@ -342,6 +343,8 @@ public partial class PermissionsOnboardingModal : CanvasLayer
     {
         GD.Print($"[PermissionsOnboarding] result {permission}={granted}");
         _awaitingOs = false;
+        if (granted)
+            GeoLocationService.Warmup();
         CallDeferred(MethodName.SyncStepFromOs);
     }
 

@@ -15,7 +15,7 @@ public static class WeatherService
 
     private const string UserAgent = "MagicalBall/1.0 (crystal-ball; weather)";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(MaxSeconds);
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
     private static readonly TimeSpan MissTtl = TimeSpan.FromMinutes(2);
     public static readonly TimeSpan AskJoinBudget = TimeSpan.FromMilliseconds(280);
 

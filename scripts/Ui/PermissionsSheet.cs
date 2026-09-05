@@ -1,4 +1,5 @@
 using CrystalBall.App;
+using CrystalBall.Context;
 using Godot;
 
 namespace CrystalBall.Ui;
@@ -158,7 +159,12 @@ public partial class PermissionsSheet : CanvasLayer
         Refresh();
     }
 
-    private void OnOsPermissionResult(string _permission, bool _granted) => Refresh();
+    private void OnOsPermissionResult(string permission, bool granted)
+    {
+        if (granted)
+            GeoLocationService.Warmup();
+        Refresh();
+    }
 
     private void OnOpenSystemSettings()
     {
